@@ -24,6 +24,8 @@ except ImportError:
     import json
 from nonebot.plugin import PluginMetadata
 
+__version__ = "0.1.1"
+
 __plugin_meta__ = PluginMetadata(
     name="定时提醒",
     description="主要用来提醒大家别忘记什么事情，可以看成定时提醒插件",
