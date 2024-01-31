@@ -58,6 +58,15 @@ _✨ NoneBot 插件简单描述 ✨_
 
 NoneBot 配置相关教程详见 [配置 | NoneBot](https://v2.nonebot.dev/docs/tutorial/configuration)
 
+> 如果需要持久化定时任务(即nonebot2重启后任务还在)，需要配置 `nonebot-plugin-apscheduler` 插件。
+>
+> 在`.env`中加上
+> `apscheduler_config={ "apscheduler.timezone": "Asia/Shanghai", "apscheduler.jobstores.default":{"type":"sqlalchemy","url":"sqlite:///jobs.sqlite"} }`
+> 
+> 进入到nonebot的安装目录，执行`source .venv/bin/activate`，进入虚拟环境
+>
+> 执行`pip install sqlalchemy`安装sqlalchemy。(不知道为什么`nonebot-plugin-apscheduler` 插件没有包含这个库)
+> 重启nonebot2，即可持久化定时任务。
 
 ### everyday_post_hour
 - 类型: int

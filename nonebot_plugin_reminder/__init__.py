@@ -23,6 +23,7 @@ try:
 except ImportError:
     import json
 from nonebot.plugin import PluginMetadata
+from io import StringIO
 
 __version__ = "0.1.1"
 
@@ -33,6 +34,7 @@ __plugin_meta__ = PluginMetadata(
     定时提醒 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点 \n
     定时提醒 列表 → 列出所有定时提醒 \n
     定时提醒 清空 → 清空所有定时提醒 \n
+    定时提醒dev  → 列出底层任务情况 \n
     删除/开启/关闭定时提醒 [id] → 删除指定id的定时提醒
     ''',
 
@@ -62,11 +64,6 @@ else:
     with open(config_path, "w", encoding="utf8") as f:
         json.dump(CONFIG, f, ensure_ascii=False, indent=4)
 
-# 将CONFIG["opened_tasks"]中的item的id存到set中
-opened_tasks_id = set()
-for item in CONFIG["opened_tasks"]:
-    opened_tasks_id.add(item["id"])
-
 try:
     scheduler = require("nonebot_plugin_apscheduler").scheduler
 except Exception:
@@ -78,10 +75,11 @@ logger.opt(colors=True).info(
     else "未检测到软依赖<y>nonebot_plugin_apscheduler</y>，<r>禁用定时任务功能</r>"
 )
 
-everyday_en_matcher = on_regex(r"^定时提醒[\s]*(\d{2}:\d{2})?$", priority=999)
+everyday_en_matcher = on_regex(r"^定时提醒[\s]*(\d{1,2}:\d{1,2})?$", priority=999)
 list_matcher = on_regex(r"^定时提醒[\s]*列表", priority=999)
+list_apsjob_matcher = on_regex(r"^定时提醒dev", priority=999)
 clear_matcher = on_regex(r"^定时提醒[\s]*清(空|除)", priority=999)
-turn_matcher = on_regex(r"^(开启|关闭|删除)定时提醒 ([0-9]+)$", priority=999, permission=SUPERUSER)
+turn_matcher = on_regex(r"^(开启|关闭|删除)定时提醒 ([a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER)
 
 lock = asyncio.Lock()
 
@@ -102,6 +100,9 @@ async def _(
 ):
     logger.opt(colors=True).debug(
         f"plugin_config: {plugin_config}"
+    )
+    logger.opt(colors=True).debug(
+        f"scheduler.print_jobs(): {scheduler.print_jobs()}"
     )
     arg1 = args[0] if args[0] else f'{plugin_config.reminder_default_hour:02d}:{plugin_config.reminder_default_minute:02d}'
     
@@ -133,6 +134,20 @@ async def list_matcher_handle(
     )
     await matcher.finish(msg)
 
+@list_apsjob_matcher.handle()
+async def list_apsjob_matcher_handle(
+    bot: Bot,
+    event: MessageEvent,
+    matcher: Matcher
+):
+    # 创建StringIO对象作为重定向的目标
+    output = StringIO()
+    if not scheduler:
+        await matcher.finish("未安装软依赖nonebot_plugin_apscheduler，不能使用此功能")
+    scheduler.print_jobs(out=output)
+
+    await matcher.finish(output.getvalue())
+
 @clear_matcher.handle()
 async def clear_matcher_handle(
     bot: Bot,
@@ -144,7 +159,6 @@ async def clear_matcher_handle(
     async with lock:
         async with aiofiles.open(config_path, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
-    opened_tasks_id.clear()
     await matcher.finish("已清空所有定时提醒")    
 
 @turn_matcher.handle()
@@ -160,13 +174,6 @@ async def _(
     schId = args[1] if args[1] else None
     if(not schId):
         await matcher.finish("请输入具体的id")
-       
-    # 判断schId是int
-    try:
-        schId = int(schId)
-    except Exception as e:
-        logger.exception(e)
-        await matcher.finish("请输入正确的id")
          
     if mode == "开启":
         # 遍历CONFIG["opened_tasks"]中每个对象的id
@@ -190,7 +197,6 @@ async def _(
         for item in CONFIG["opened_tasks"]:
             if item["id"] == schId:
                 CONFIG["opened_tasks"].remove(item)
-                opened_tasks_id.remove(schId)
                 removeScheduler(schId)
                 
     async with lock:
@@ -223,26 +229,16 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
         logger.opt(colors=True).info(
             f"已设定于 <y>{str(hour).rjust(2, '0')}:{str(minute).rjust(2, '0')}</y> 定时发送提醒"
         )
-        
-        warp_func = partial(post_scheduler, user_id=userId, msg=data, judgeWorkDay=False)
-
+        job = None
         plans = CONFIG["opened_tasks"]
-        curLen: Optional[int] = plans.__len__()
-        logger.opt(colors=True).debug(
-            f"plans[-1]: {plans[-1]}"
-        )
-        maxId = plans[-1].get("id") if curLen > 0 else 0 
-        maxId += 1
-        while maxId in opened_tasks_id:
-            maxId += 1
-        opened_tasks_id.add(maxId)
 
         # 每天或工作日
+        judgeWorkDay = False
         if repeat == '1' or repeat == '3':
             if repeat == '3':
-                warp_func = partial(post_scheduler, user_id=userId, msg=data, judgeWorkDay=True)
-            scheduler.add_job(
-                warp_func, "cron", hour=hour, minute=minute, id="{maxId}"
+                judgeWorkDay = True
+            job = scheduler.add_job(
+                post_scheduler, "cron", hour=hour, minute=minute, args=[userId, data, judgeWorkDay]
             )
         
         # 某天
@@ -259,14 +255,14 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
             except ValueError:
                 await matcher.finish(f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01")
             
-            scheduler.add_job(
-                warp_func, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id="{maxId}"
+            job = scheduler.add_job(
+                post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), args=[userId, data, judgeWorkDay]
             )
 
-
-        plans.append({"id": maxId, "time": time, "data": data,  "repeat": repeat, "userId": userId, "status": 1})
-        async with aiofiles.open(config_path, "w", encoding="utf8") as f:
-            await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
+        if job is not None:
+            plans.append({"id": job.id, "time": time, "data": data,  "repeat": repeat, "userId": userId, "status": 1})
+            async with aiofiles.open(config_path, "w", encoding="utf8") as f:
+                await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
             
 async def setScheduler(id: str, status: int = 1):
     if scheduler:
@@ -275,7 +271,7 @@ async def setScheduler(id: str, status: int = 1):
         else:
             scheduler.reschedule_job(id)
             
-async def removeScheduler(id: str):
+async def removeScheduler(id: int):
     if scheduler:
         scheduler.remove_job(id)
         
