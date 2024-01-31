@@ -34,7 +34,7 @@ __usage__ = """
 """.strip()
 
 
-env_config = Config(**get_driver().config.dict())
+plugin_config = Config.parse_obj(get_driver().config)
 
 config_path = Path("config/remain_plugin.json")
 config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +70,7 @@ no_ffmpeg_error = (
 )
 
 @everyday_en_matcher.got("repeat", prompt="选择执行间隔:\n1.每天\n2.某天\n3.工作日")
-@everyday_en_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!")
+@everyday_en_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
 async def _(
     bot: Bot,
     event: MessageEvent,
@@ -79,14 +79,18 @@ async def _(
     word: Message = ArgPlainText(),
     repeat: Message = ArgPlainText()
 ):
-    arg1 = args[0] if args[0] else f'${env_config.default_hour:02d}:${env_config.default_minute:02d}'
+    logger.opt(colors=True).info(
+        f"plugin_config: {plugin_config}"
+    )
+    arg1 = args[0] if args[0] else f'{plugin_config.reminder_default_hour:02d}:{plugin_config.reminder_default_minute:02d}'
     # 判断schId是int
     try:
         repeat = int(repeat)
     except Exception as e:
         logger.exception(e)
         await matcher.finish("选择正确的执行间隔, 1/2/3")
-        
+    
+    word = word if word != '0' else "打卡!!!"
     try:
         await addScheduler(arg1, word, event.user_id, matcher=matcher, repeat=repeat)
     except Exception as e:
@@ -106,8 +110,8 @@ async def list_matcher_handle(
         f"CONFIG['opened_tasks']: {CONFIG['opened_tasks']}"
     )
     for item in CONFIG["opened_tasks"]:
-        msg += f"id: {item['id']}  时间: {item['time']} 对象：{item['userId']} 内容: { item['data'] } 周期：{ '每天' if item['repeat'] == 1
-        else '某天' if item['repeat'] == 2 else '工作日' }  状态: {'开启' if item['status'] == 1 else '关闭'}\n"
+        msg += f"id: {item['id']}  时间: {item['time']} 对象：{item['userId']} 内容: { item['data'] } \
+              周期：{ '每天' if item['repeat'] == 1 else '某天' if item['repeat'] == 2 else '工作日' }  状态: {'开启' if item['status'] == 1 else '关闭'} \n"
     
     logger.opt(colors=True).info(
         f"定时列表 <y>{msg}</y> 定时发送提醒"
