@@ -12,7 +12,7 @@ from nonebot.permission import SUPERUSER
 from nonebot import require, get_driver, get_bot
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 import asyncio
 import aiofiles
 from .config import Config
@@ -22,17 +22,31 @@ try:
     import ujson as json
 except ImportError:
     import json
+from nonebot.plugin import PluginMetadata
 
+__plugin_meta__ = PluginMetadata(
+    name="定时提醒",
+    description="主要用来提醒大家别忘记什么事情，可以看成定时提醒插件",
+    usage='''
+    定时提醒 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点 \n
+    定时提醒 列表 → 列出所有定时提醒 \n
+    定时提醒 清空 → 清空所有定时提醒 \n
+    删除/开启/关闭定时提醒 [id] → 删除指定id的定时提醒
+    ''',
 
-__help_plugin_name__ = "定时提醒"
-__help_version__ = "1.0"
-__usage__ = """
-定时提醒 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点
-定时提醒 列表 → 列出所有定时提醒
-定时提醒 清空 → 清空所有定时提醒
-删除/开启/关闭定时提醒 [id] → 删除指定id的定时提醒
-""".strip()
+    type="application",
+    # 发布必填，当前有效类型有：`library`（为其他插件编写提供功能），`application`（向机器人用户提供功能）。
 
+    homepage="https://github.com/velor2012/nonebot_plugin_reminder",
+    # 发布必填。
+
+    config=Config,
+    # 插件配置项类，如无需配置可不填写。
+
+    supported_adapters={"~onebot.v11"},
+    # 支持的适配器集合，其中 `~` 在此处代表前缀 `nonebot.adapters.`，其余适配器亦按此格式填写。
+    # 若插件可以保证兼容所有适配器（即仅使用基本适配器功能）可不填写，否则应该列出插件支持的适配器。
+)
 
 plugin_config = Config.parse_obj(get_driver().config)
 
@@ -59,7 +73,7 @@ logger.opt(colors=True).info(
 
 everyday_en_matcher = on_regex(r"^定时提醒[\s]*(\d{2}:\d{2})?$", priority=999)
 list_matcher = on_regex(r"^定时提醒[\s]*列表", priority=999)
-clear_matcher = on_regex(r"^定时提醒[\s]*清空", priority=999)
+clear_matcher = on_regex(r"^定时提醒[\s]*清(空|除)", priority=999)
 turn_matcher = on_regex(r"^(开启|关闭|删除)定时提醒 ([0-9]+)$", priority=999, permission=SUPERUSER)
 
 lock = asyncio.Lock()
@@ -69,7 +83,7 @@ no_ffmpeg_error = (
     "https://github.com/MelodyYuuka/nonebot_plugin_everyday_en#q-%E4%B8%BA%E4%BB%80%E4%B9%88%E6%B2%A1%E6%9C%89%E8%AF%AD%E9%9F%B3"
 )
 
-@everyday_en_matcher.got("repeat", prompt="选择执行间隔:\n1.每天\n2.某天\n3.工作日")
+@everyday_en_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
 @everyday_en_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
 async def _(
     bot: Bot,
@@ -83,12 +97,6 @@ async def _(
         f"plugin_config: {plugin_config}"
     )
     arg1 = args[0] if args[0] else f'{plugin_config.reminder_default_hour:02d}:{plugin_config.reminder_default_minute:02d}'
-    # 判断schId是int
-    try:
-        repeat = int(repeat)
-    except Exception as e:
-        logger.exception(e)
-        await matcher.finish("选择正确的执行间隔, 1/2/3")
     
     word = word if word != '0' else "打卡!!!"
     try:
@@ -111,7 +119,7 @@ async def list_matcher_handle(
     )
     for item in CONFIG["opened_tasks"]:
         msg += f"id: {item['id']}  时间: {item['time']} 对象：{item['userId']} 内容: { item['data'] } \
-              周期：{ '每天' if item['repeat'] == 1 else '某天' if item['repeat'] == 2 else '工作日' }  状态: {'开启' if item['status'] == 1 else '关闭'} \n"
+              周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] }  状态: {'开启' if item['status'] == 1 else '关闭'} \n"
     
     logger.opt(colors=True).info(
         f"定时列表 <y>{msg}</y> 定时发送提醒"
@@ -194,7 +202,7 @@ async def post_scheduler(user_id: int, msg: str, judgeWorkDay: bool = False):
 ## 绑定post_scheduler 和参数 a,
 
 
-async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, repeat: int = 1, dateStr: str = None):
+async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, repeat: str = 1):
     # # 重置
     # scheduler.remove_all_jobs()
     # CONFIG: Dict[str, List] = {"opened_tasks": []}
@@ -207,33 +215,33 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
             f"已设定于 <y>{str(hour).rjust(2, '0')}:{str(minute).rjust(2, '0')}</y> 定时发送提醒"
         )
         
-        warp_func = partial(post_scheduler, user_id=userId, msg=data)
+        warp_func = partial(post_scheduler, user_id=userId, msg=data, judgeWorkDay=False)
         curLen: Optional[int] = CONFIG["opened_tasks"].__len__()
         
         # 每天或工作日
-        if repeat == 1 or repeat == 3:
-            if repeat == 3:
+        if repeat == '1' or repeat == '3':
+            if repeat == '3':
                 warp_func = partial(post_scheduler, user_id=userId, msg=data, judgeWorkDay=True)
             scheduler.add_job(
                 warp_func, "cron", hour=hour, minute=minute, id="{curLen}"
             )
         
         # 某天
-        elif repeat == 2:
+        else:
             # 检查date 格式是否符合 yyyy-mm-dd
             year = 1
             month = 1
             day = 1
             try:
-                date_object = datetime.strptime(dateStr, '%Y-%m-%d')
+                date_object = datetime.strptime(repeat, '%Y-%m-%d')
                 year = date_object.year
                 month = date_object.month
                 day = date_object.day
             except ValueError:
                 await matcher.finish(f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01")
-
+            
             scheduler.add_job(
-                warp_func, "date", run_date=date(year, month, day), hour=hour, minute=minute, id="{curLen}"
+                warp_func, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id="{curLen}"
             )
 
 
