@@ -95,7 +95,7 @@ async def _(
     word: Message = ArgPlainText(),
     repeat: Message = ArgPlainText()
 ):
-    logger.opt(colors=True).info(
+    logger.opt(colors=True).debug(
         f"plugin_config: {plugin_config}"
     )
     arg1 = args[0] if args[0] else f'{plugin_config.reminder_default_hour:02d}:{plugin_config.reminder_default_minute:02d}'
@@ -218,14 +218,18 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
         )
         
         warp_func = partial(post_scheduler, user_id=userId, msg=data, judgeWorkDay=False)
-        curLen: Optional[int] = CONFIG["opened_tasks"].__len__()
-        
+
+        plans = CONFIG["opened_tasks"]
+        curLen: Optional[int] = plans.__len__()
+        maxId = plans[-1].get("id") if curLen > 0 else 0 
+        maxId += 1
+
         # 每天或工作日
         if repeat == '1' or repeat == '3':
             if repeat == '3':
                 warp_func = partial(post_scheduler, user_id=userId, msg=data, judgeWorkDay=True)
             scheduler.add_job(
-                warp_func, "cron", hour=hour, minute=minute, id="{curLen}"
+                warp_func, "cron", hour=hour, minute=minute, id="{maxId}"
             )
         
         # 某天
@@ -243,11 +247,11 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
                 await matcher.finish(f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01")
             
             scheduler.add_job(
-                warp_func, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id="{curLen}"
+                warp_func, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id="{maxId}"
             )
 
 
-        CONFIG["opened_tasks"].append({"id": curLen + 1, "time": time, "data": data,  "repeat": repeat, "userId": userId, "status": 1})
+        plans.append({"id": maxId, "time": time, "data": data,  "repeat": repeat, "userId": userId, "status": 1})
         async with aiofiles.open(config_path, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
             
