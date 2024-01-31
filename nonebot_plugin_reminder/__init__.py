@@ -62,6 +62,11 @@ else:
     with open(config_path, "w", encoding="utf8") as f:
         json.dump(CONFIG, f, ensure_ascii=False, indent=4)
 
+# 将CONFIG["opened_tasks"]中的item的id存到set中
+opened_tasks_id = set()
+for item in CONFIG["opened_tasks"]:
+    opened_tasks_id.add(item["id"])
+
 try:
     scheduler = require("nonebot_plugin_apscheduler").scheduler
 except Exception:
@@ -139,6 +144,7 @@ async def clear_matcher_handle(
     async with lock:
         async with aiofiles.open(config_path, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
+    opened_tasks_id.clear()
     await matcher.finish("已清空所有定时提醒")    
 
 @turn_matcher.handle()
@@ -184,6 +190,7 @@ async def _(
         for item in CONFIG["opened_tasks"]:
             if item["id"] == schId:
                 CONFIG["opened_tasks"].remove(item)
+                opened_tasks_id.remove(schId)
                 removeScheduler(schId)
                 
     async with lock:
@@ -221,8 +228,14 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
 
         plans = CONFIG["opened_tasks"]
         curLen: Optional[int] = plans.__len__()
+        logger.opt(colors=True).debug(
+            f"plans[-1]: {plans[-1]}"
+        )
         maxId = plans[-1].get("id") if curLen > 0 else 0 
         maxId += 1
+        while maxId in opened_tasks_id:
+            maxId += 1
+        opened_tasks_id.add(maxId)
 
         # 每天或工作日
         if repeat == '1' or repeat == '3':
