@@ -48,9 +48,11 @@ _✨ NoneBot 插件简单描述 ✨_
   再之后 Bot 会询问需要提醒的内容
   默认为 `打卡！！`, 回复0即使默认内容
 
-- `定时提醒 列表`: 列出设置的所有定时任务
-- `定时提醒 清空/清除`: 清除的所有定时任务
-- `删除/开启/关闭定时提醒 [id]` : 删除/开启/关闭指定id的定时任务
+- `定时 列表`: 列出设置的所有定时任务
+- `清空/清除定时 `: 清除的所有定时任务
+- `删除/开启/关闭/执行定时 [id]` : 删除/开启/关闭指定id的定时任务
+- `定时请求`: 定时请求数据，目前支持图片`
+- `定时jobs`: 列出底层任务情况(debug使用) \n
 
 ## 配置项
 
@@ -80,6 +82,20 @@ NoneBot 配置相关教程详见 [配置 | NoneBot](https://v2.nonebot.dev/docs/
 - 默认: 0
 >```python
 >REMINDER_DEFAULT_MINUTE=0
+>```
+
+### everyday_id_len
+- 类型: int
+- 默认: 0
+>```python
+>REMINDER_ID_LEN=0
+>```
+
+### everyday_id_len
+- 类型: str
+- 默认: 0
+>```python
+>REMINDER_ID_PREFIX=reminder
 >```
 
 ## 依赖

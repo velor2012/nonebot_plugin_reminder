@@ -1,10 +1,13 @@
 import datetime
+import random
+import string
 from nonebot.plugin import on_regex
 from nonebot.params import ArgPlainText, Arg
 from nonebot.adapters.onebot.v11 import (
     Bot,
     MessageEvent,
     Message,
+    MessageSegment
 )
 from nonebot.params import Matcher, RegexGroup
 from nonebot.log import logger
@@ -31,11 +34,12 @@ __plugin_meta__ = PluginMetadata(
     name="定时提醒",
     description="主要用来提醒大家别忘记什么事情，可以看成定时提醒插件",
     usage='''
-    定时提醒 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点 \n
-    定时提醒 列表 → 列出所有定时提醒 \n
-    定时提醒 清空 → 清空所有定时提醒 \n
-    定时提醒dev  → 列出底层任务情况 \n
-    删除/开启/关闭定时提醒 [id] → 删除指定id的定时提醒
+    定时 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点 \n
+    定时列表 → 列出所有定时提醒 \n
+    清空定时 → 清空所有定时提醒 \n
+    定时jobs  → 列出底层任务情况 \n
+    定时请求  → 定时请求数据，目前支持图片 \n
+    执行/删除/开启/关闭定时 [id] → 执行/删除/开启/关闭指定id的定时提醒
     ''',
 
     type="application",
@@ -75,31 +79,29 @@ logger.opt(colors=True).info(
     else "未检测到软依赖<y>nonebot_plugin_apscheduler</y>，<r>禁用定时任务功能</r>"
 )
 
-everyday_en_matcher = on_regex(r"^定时提醒[\s]*(\d{1,2}:\d{1,2})?$", priority=999)
-list_matcher = on_regex(r"^定时提醒[\s]*列表", priority=999)
-list_apsjob_matcher = on_regex(r"^定时提醒dev", priority=999)
-clear_matcher = on_regex(r"^定时提醒[\s]*清(空|除)", priority=999)
-turn_matcher = on_regex(r"^(开启|关闭|删除)定时提醒 ([a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER)
+remainer_matcher = on_regex(r"^定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999)
+fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999)
+list_matcher = on_regex(r"^定时[\s]*列表", priority=999)
+list_apsjob_matcher = on_regex(r"^定时jobs", priority=999)
+clear_matcher = on_regex(r"^清(空|除)定时", priority=999)
+turn_matcher = on_regex(rf"^(开启|关闭|删除|执行)定时 ({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER)
 
 lock = asyncio.Lock()
 
-no_ffmpeg_error = (
-    "发送语音失败，可能是风控或未安装FFmpeg，详见 "
-    "https://github.com/MelodyYuuka/nonebot_plugin_everyday_en#q-%E4%B8%BA%E4%BB%80%E4%B9%88%E6%B2%A1%E6%9C%89%E8%AF%AD%E9%9F%B3"
-)
 
-@everyday_en_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
-@everyday_en_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
-async def _(
+@remainer_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
+@remainer_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
+async def remainer_handler(
     bot: Bot,
     event: MessageEvent,
     matcher: Matcher,
     args: Tuple[Optional[str]] = RegexGroup(),
     word: Message = ArgPlainText(),
-    repeat: Message = ArgPlainText()
+    repeat: Message = ArgPlainText(),
+    url: str = None
 ):
     logger.opt(colors=True).debug(
-        f"plugin_config: {plugin_config}"
+        f"url: {url}"
     )
     logger.opt(colors=True).debug(
         f"scheduler.print_jobs(): {scheduler.print_jobs()}"
@@ -107,13 +109,32 @@ async def _(
     arg1 = args[0] if args[0] else f'{plugin_config.reminder_default_hour:02d}:{plugin_config.reminder_default_minute:02d}'
     
     word = word if word != '0' else "打卡!!!"
+
     try:
-        await addScheduler(arg1, word, event.user_id, matcher=matcher, repeat=repeat)
+        await addScheduler(arg1, word, event.user_id, matcher=matcher, repeat=repeat, url=url)
     except Exception as e:
         logger.exception(e)
         await matcher.finish("设置失败")
         
     await matcher.finish("设置成功")
+
+@fetch_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
+@fetch_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
+@fetch_matcher.got("url", prompt="请输入需要请求的url，目前支持图片")
+async def fetch_handler(
+    bot: Bot,
+    event: MessageEvent,
+    matcher: Matcher,
+    args: Tuple[Optional[str]] = RegexGroup(),
+    word: Message = ArgPlainText(),
+    repeat: Message = ArgPlainText(),
+    url: str = ArgPlainText()
+):
+    if url is None or url == "" or not isUrlSupport(url):
+        await matcher.finish("暂不支持该类型的请求")
+    else:
+        await remainer_handler(bot, event, matcher, args, word, repeat, url)
+
 
 @list_matcher.handle()
 async def list_matcher_handle(
@@ -126,12 +147,16 @@ async def list_matcher_handle(
         f"CONFIG['opened_tasks']: {CONFIG['opened_tasks']}"
     )
     for item in CONFIG["opened_tasks"]:
-        msg += f"id: {item['id']}  时间: {item['time']} 对象：{item['userId']} 内容: { item['data'] } \
-              周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] }  状态: {'开启' if item['status'] == 1 else '关闭'} \n"
+        msg += f"id: {item['id']}   时间: {item['time']} \n\
+对象：{item['userId']} \n\
+内容: { item['data'] } \n\
+周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] }  状态: {'开启' if item['status'] == 1 else '关闭'} \n"
     
     logger.opt(colors=True).info(
         f"定时列表 <y>{msg}</y> 定时发送提醒"
     )
+    if(msg == ""):
+        await matcher.finish("没有定时提醒")
     await matcher.finish(msg)
 
 @list_apsjob_matcher.handle()
@@ -198,26 +223,36 @@ async def _(
             if item["id"] == schId:
                 CONFIG["opened_tasks"].remove(item)
                 removeScheduler(schId)
-                
+    elif mode == "执行":
+        job = scheduler.get_job(schId)
+        if job:
+            # 添加一个job并立即执行
+            job.modify(next_run_time=datetime.now())
+            # new_job = scheduler.run_job(job, 'date', next_run_time=datetime.now())
+                   
     async with lock:
         async with aiofiles.open(config_path, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
     await matcher.finish(f"已成功{mode}{schId}的定时提醒")
 
-async def post_scheduler(user_id: int, msg: str, judgeWorkDay: bool = False):
+async def post_scheduler(user_id: int, msg: str, judgeWorkDay: bool = False, url: str = None):
     if judgeWorkDay:
         if not is_workday(date.today()):
             logger.opt(colors=True).info(
                 f"今天不是工作日，不发送提醒"
             )
             return
+    if url is not None and url != "":
+        msg_img = MessageSegment.image(url)
+        logger.opt(colors=True).debug(
+            f"获取图片成功"
+        )
+        msg = Message(msg) + Message(msg_img)
     bot: Bot = get_bot()
     await bot.send_private_msg(user_id=user_id, message=msg)
 
-## 绑定post_scheduler 和参数 a,
 
-
-async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, repeat: str = 1):
+async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, repeat: str = 1, url: str = None):
     # # 重置
     # scheduler.remove_all_jobs()
     # CONFIG: Dict[str, List] = {"opened_tasks": []}
@@ -232,13 +267,15 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
         job = None
         plans = CONFIG["opened_tasks"]
 
+        useId = generateRandomId()
+
         # 每天或工作日
         judgeWorkDay = False
         if repeat == '1' or repeat == '3':
             if repeat == '3':
                 judgeWorkDay = True
             job = scheduler.add_job(
-                post_scheduler, "cron", hour=hour, minute=minute, args=[userId, data, judgeWorkDay]
+                post_scheduler, "cron", hour=hour, minute=minute, id=useId, args=[userId, data, judgeWorkDay, url]
             )
         
         # 某天
@@ -256,7 +293,8 @@ async def addScheduler(time: str, data: str, userId: int , matcher: Matcher, rep
                 await matcher.finish(f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01")
             
             job = scheduler.add_job(
-                post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), args=[userId, data, judgeWorkDay]
+                post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
+                      args=[userId, data, judgeWorkDay, url]
             )
 
         if job is not None:
@@ -277,5 +315,33 @@ async def removeScheduler(id: int):
         
 async def clearScheduler():
     if scheduler:
-        scheduler.remove_all_jobs()
+        jobs = scheduler.get_jobs()
+        if not jobs or len(jobs) == 0:
+            return False
+        for job in jobs:
+            if job.id.lower().startswith(plugin_config.reminder_id_prefix.lower()):
+                scheduler.remove_job(job.id)
         
+def generateRandomId():
+    characters = string.ascii_lowercase + string.digits
+    random_id = plugin_config.reminder_id_prefix + '_' + ''.join(random.choices(characters, k=plugin_config.reminder_id_len))
+    while checkIdExit(random_id):
+        random_id = plugin_config.reminder_id_prefix + '_' + ''.join(random.choices(characters, k=plugin_config.reminder_id_len))
+    return random_id
+
+def checkIdExit(needCheckedId: str):
+    jobs = scheduler.get_jobs()
+    if not jobs or len(jobs) == 0:
+        return False
+    for job in jobs:
+        if job.id.lower() == needCheckedId.lower():
+            return True
+    return False
+
+def isUrlSupport(url: str):
+    # 判断url是否是图片
+    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
+    if url.lower().startswith('http') and any(url.lower().endswith(ext) for ext in image_extensions):
+        return True
+    else:
+        return False
