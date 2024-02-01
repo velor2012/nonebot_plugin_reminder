@@ -29,6 +29,8 @@ except ImportError:
     import json
 from nonebot.plugin import PluginMetadata
 from io import StringIO
+from nonebot.typing import T_State
+from nonebot.adapters import MessageTemplate
 
 __version__ = "0.1.1"
 
@@ -86,7 +88,8 @@ fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,
 list_matcher = on_regex(r"^定时[\s]*列表", priority=999,rule=to_me())
 list_apsjob_matcher = on_regex(r"^定时jobs", priority=999,rule=to_me())
 clear_matcher = on_regex(r"^清(空|除)定时", priority=999,rule=to_me())
-turn_matcher = on_regex(rf"^(开启|关闭|删除|执行)定时 ({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+turn_matcher = on_regex(rf"^(开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+update_matcher = on_regex(rf"^(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 
 lock = asyncio.Lock()
 
@@ -115,13 +118,13 @@ async def remainer_handler(
         groupId = event.group_id
     try:
         res = await addScheduler(arg1, word, event.user_id, groupId=groupId, repeat=repeat, url=url)
-        if res is not None and res != "":
-            msg.append(res)
+        if res is not None and res != "" and msg["code"] != 0:
+            msg = Message(res)
         else:
-            msg.append("设置成功")
+            msg = Message("设置成功")
     except Exception as e:
         logger.exception(e)
-        msg.append("设置失败")
+        msg = Message("设置失败")
     
     await sendReply(bot, matcher, event, msg)
 
@@ -143,6 +146,57 @@ async def fetch_handler(
         await remainer_handler(bot, event, matcher, args, word, repeat, url)
 
 
+@update_matcher.got("type", prompt="请输入需要修改的地方： 1. 时间 2.间隔 3.提醒语句 4.url 5.对象 6.群组")
+async def update_handler(
+    bot: Bot,
+    event: MessageEvent,
+    matcher: Matcher,
+    state: T_State,
+    args: Tuple[Optional[str], ...] = RegexGroup(),
+    type: Message = ArgPlainText()
+):
+    typeMap = {"1": "time", "2": "repeat", "3": "data", "4": "url", "5": "userId", "6": "groupId"}
+    if not scheduler:
+        await sendReply(bot, matcher, event, "未安装软依赖nonebot_plugin_apscheduler，不能使用定时发送功能")
+    if args[1] is None:
+        await sendReply(bot, matcher, event, "请输入具体的id")
+    schId = args[1]
+ 
+    jobItem = findJobFromJSONById(schId)
+    if jobItem is None:
+        await sendReply(bot, matcher, event, "未找到该id的定时提醒")
+            
+    oldValue = jobItem[typeMap[type]] if jobItem and typeMap[type] in jobItem else ""
+    
+    state["reminder_update_old_value"] = oldValue
+    state["reminder_update_type"] = type
+    state["reminder_update_jobItem"] = jobItem
+
+@update_matcher.got("newValue", prompt=MessageTemplate("请输入更新后的值，当前为: {reminder_update_old_value}"))
+async def update_handler2(
+    bot: Bot,
+    event: MessageEvent,
+    matcher: Matcher,
+    state: T_State,
+    newValue: Message = ArgPlainText(),
+):
+    item = state["reminder_update_jobItem"]
+    if item is None:
+        sendReply(bot, matcher, event, "未找到定时提醒")
+    typeMap = {"1": "time", "2": "repeat", "3": "data", "4": "url", "5": "userId", "6": "groupId"}
+    item[typeMap[state["reminder_update_type"]]] = newValue
+    
+    msg = Message("")
+    res = await updateScheduler(item)
+    if res is not None and res != "":
+        if res["code"] != 0:
+            msg.append(res)
+        else:
+            msg.append(f"设置成功, id更改为: {res['msg']}")
+    else:
+        msg.append("设置成功")
+    await sendReply(bot, matcher, event, msg)
+
 @list_matcher.handle()
 async def list_matcher_handle(
     bot: Bot,
@@ -154,11 +208,15 @@ async def list_matcher_handle(
         f"CONFIG['opened_tasks']: {CONFIG['opened_tasks']}"
     )
     for item in CONFIG["opened_tasks"]:
-        msg.append(f"id: {item['id']}   时间: {item['time']} \n\
+        msg.append(f"id: {item['id']} \n\
 对象：{item['userId']} \n\
 群组: {item['groupId']} \n\
 内容: { item['data'] } \n\
-周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] }  状态: {'开启' if item['status'] == 1 else '关闭'} \n")
+URL: {item['url']} \n\
+周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] } \n\
+时间: {item['time']} \n\
+状态: {'开启' if item['status'] == 1 else '关闭'} \n\
+-------------------------\n")
 
     if(msg.extract_plain_text() == ""):
         msg.append("没有定时提醒")
@@ -208,30 +266,20 @@ async def _(
     schId = args[1] if args[1] else None
     if(not schId):
         await sendReply(bot, matcher, event, "请输入具体的id")
-         
+    
+    item = findJobFromJSONById(schId)
+        
     if mode == "开启":
-        # 遍历CONFIG["opened_tasks"]中每个对象的id
-        for item in CONFIG["opened_tasks"]:
-            find = False
-            if item["id"] == schId:
-                find = True
-                if item["status"] == 1:
-                    await sendReply(bot, matcher, event, "该定时提醒已开启，无需重复开启")
-                else:
-                    item["status"] = 1
-                    setScheduler(schId, 1)
-            if not find:
-                await sendReply(bot, matcher, event, "没有找到对应id的题型, 请检查输入是否正确")
+        if item["status"] == 1:
+            await sendReply(bot, matcher, event, "该定时提醒已开启，无需重复开启")
+        else:
+            item["status"] = 1
     elif mode == "关闭":
-        for item in CONFIG["opened_tasks"]:
-            if item["id"] == schId:
-                item["status"] = 0
-                setScheduler(schId, 0)
+        item["status"] = 0
+        setScheduler(schId, 0)
     elif mode == "删除":
-        for item in CONFIG["opened_tasks"]:
-            if item["id"] == schId:
-                CONFIG["opened_tasks"].remove(item)
-                removeScheduler(schId)
+        CONFIG["opened_tasks"].remove(item)
+        removeScheduler(schId)
     elif mode == "执行":
         job = scheduler.get_job(schId)
         if job:
@@ -320,7 +368,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
                 month = date_object.month
                 day = date_object.day
             except ValueError:
-                return f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01"
+                return {"code": -1, "msg": f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01"}
             
             job = scheduler.add_job(
                 post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
@@ -329,9 +377,10 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
 
         if job is not None:
             plans.append({"id": job.id, "time": time, "data": data, \
-                "repeat": repeat, "userId": userId, "groupId": groupId, "status": 1})
+                "repeat": repeat, "userId": userId, "groupId": groupId, "url": url, "status": 1})
             async with aiofiles.open(config_path, "w", encoding="utf8") as f:
                 await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
+            return {"code": 0, "msg": job.id}
             
 async def setScheduler(id: str, status: int = 1):
     if scheduler:
@@ -352,6 +401,13 @@ async def clearScheduler():
         for job in jobs:
             if job.id.lower().startswith(plugin_config.reminder_id_prefix.lower()):
                 scheduler.remove_job(job.id)
+
+# 先删除后添加新job
+async def updateScheduler(item: Any):
+    id = item["id"]
+    CONFIG["opened_tasks"].remove(item)
+    removeScheduler(id)
+    return await addScheduler(item["time"], item["data"], item["userId"], item["repeat"], item["url"], item["groupId"])
         
 def generateRandomId():
     characters = string.ascii_lowercase + string.digits
@@ -404,3 +460,8 @@ async def sendReply(bot: Bot, matcher: Matcher, event: GroupMessageEvent, msg: M
         )
     await matcher.finish(msg) 
 
+def findJobFromJSONById(id: str):
+    for item in CONFIG["opened_tasks"]:
+        if item["id"] == id:
+            return item
+    return None

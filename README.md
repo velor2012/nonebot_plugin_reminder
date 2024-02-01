@@ -26,10 +26,12 @@ _✨ NoneBot 插件简单描述 ✨_
 
 ## 指令
 
-定时提醒 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点
-定时提醒 列表 → 列出所有定时提醒
-定时提醒 清空 → 清空所有定时提醒
-删除/开启/关闭定时提醒 [id] → 删除指定id的定时提醒
+定时 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点
+定时请求[date]→ 设置定时请求某个URL，返回其内容，**目前只能请求图片**，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点
+定时列表 → 列出所有定时提醒
+清空|清除定时 → 清空所有定时提醒
+开启|关闭|删除|执行定时提醒 [id] → 开启|关闭|删除|执行指定id的定时提醒
+修改|更新定时 [id] → 修改指定id的定时提醒
 
 - `定时提醒`: 在默认时间定时提醒
   - `定时提醒 [时间]`: 在指定时间定时提醒
@@ -48,11 +50,12 @@ _✨ NoneBot 插件简单描述 ✨_
   再之后 Bot 会询问需要提醒的内容
   默认为 `打卡！！`, 回复0即使默认内容
 
-- `定时 列表`: 列出设置的所有定时任务
+- `定时请求`：与上面用法类似
+- `定时列表`: 列出设置的所有定时任务
 - `清空/清除定时 `: 清除的所有定时任务
 - `删除/开启/关闭/执行定时 [id]` : 删除/开启/关闭指定id的定时任务
-- `定时请求`: 定时请求数据，目前支持图片`
-- `定时jobs`: 列出底层任务情况(debug使用) \n
+- `定时请求`: 定时请求数据，目前支持图片
+- `定时jobs`: 列出底层任务情况(debug使用)
 
 ## 配置项
 
@@ -70,29 +73,31 @@ NoneBot 配置相关教程详见 [配置 | NoneBot](https://v2.nonebot.dev/docs/
 > 执行`pip install sqlalchemy`安装sqlalchemy。(不知道为什么`nonebot-plugin-apscheduler` 插件没有包含这个库)
 > 重启nonebot2，即可持久化定时任务。
 
-### everyday_post_hour
+### reminder_default_hour
 - 类型: int
 - 默认: 17
 >```python
 >REMINDER_DEFAULT_HOUR=17
 >```
 
-### everyday_post_minute
+### reminder_default_minute
 - 类型: int
 - 默认: 0
 >```python
 >REMINDER_DEFAULT_MINUTE=0
 >```
 
-### everyday_id_len
+### reminder_id_len
 - 类型: int
-- 默认: 0
+- 说明：底层任务id长度
+- 默认: 5
 >```python
->REMINDER_ID_LEN=0
+>REMINDER_ID_LEN=5
 >```
 
-### everyday_id_len
+### reminder_id_prefix
 - 类型: str
+- 说明：底层任务id的前缀
 - 默认: 0
 >```python
 >REMINDER_ID_PREFIX=reminder
@@ -104,6 +109,15 @@ NoneBot 配置相关教程详见 [配置 | NoneBot](https://v2.nonebot.dev/docs/
 ## 致谢
 
 代码基于 [nonebot-plugin-everyday-en](https://github.com/MelodyYuuka/nonebot_plugin_everyday_en)，感谢原作者的开源精神！
+
+## 其他
+修改定时的时候，userId(QQ号)表示需要回复定时消息给谁，私聊的时候就是自己本人，群聊的时候就是@机器人的那个群友。类似的，groupId表示群号，让机器人可以知道回复到哪个群。
+
+这里有三种情况：
+
+1. userId > 0，groupId > 0，表示定时任务出发之后@群中的某个群友回复
+2. userId > 0，groupId < 0，表示定时任务出发之后私聊某个人回复
+3. userId < 0，groupId > 0，表示定时任务出发在群直接回复，不@群友
 
 ## 开源许可
 
