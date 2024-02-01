@@ -118,8 +118,11 @@ async def remainer_handler(
         groupId = event.group_id
     try:
         res = await addScheduler(arg1, word, event.user_id, groupId=groupId, repeat=repeat, url=url)
-        if res is not None and res != "" and msg["code"] != 0:
-            msg = Message(res)
+        logger.opt(colors=True).debug(
+            f"addScheduler.res: {res}"
+        )
+        if res is not None and res != "" and res["code"] != 0:
+            msg = Message(res['msg'])
         else:
             msg = Message("设置成功")
     except Exception as e:
@@ -383,14 +386,14 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             return {"code": 0, "msg": job.id}
             
 async def setScheduler(id: str, status: int = 1):
-    if scheduler:
+    if scheduler and isVaildId(id):
         if(status == 0):
             scheduler.pause_job(id)
         else:
             scheduler.reschedule_job(id)
             
-async def removeScheduler(id: int):
-    if scheduler:
+async def removeScheduler(id: str):
+    if scheduler and isVaildId(id):
         scheduler.remove_job(id)
         
 async def clearScheduler():
@@ -399,7 +402,7 @@ async def clearScheduler():
         if not jobs or len(jobs) == 0:
             return False
         for job in jobs:
-            if job.id.lower().startswith(plugin_config.reminder_id_prefix.lower()):
+            if isVaildId(job.id):
                 scheduler.remove_job(job.id)
 
 # 先删除后添加新job
@@ -407,7 +410,7 @@ async def updateScheduler(item: Any):
     id = item["id"]
     CONFIG["opened_tasks"].remove(item)
     removeScheduler(id)
-    return await addScheduler(item["time"], item["data"], item["userId"], item["repeat"], item["url"], item["groupId"])
+    return await addScheduler(item["time"], item["data"], int(item["userId"]), item["repeat"], item["url"], int(item["groupId"]))
         
 def generateRandomId():
     characters = string.ascii_lowercase + string.digits
@@ -465,3 +468,8 @@ def findJobFromJSONById(id: str):
         if item["id"] == id:
             return item
     return None
+
+def isVaildId(id: str):
+    if id is None or id == "":
+        return False
+    return id.lower().startswith(plugin_config.reminder_id_prefix.lower())
