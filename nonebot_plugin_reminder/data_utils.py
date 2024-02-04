@@ -25,5 +25,6 @@ async def save_datas(CONFIG: Any):
         async with aiofiles.open(data_file, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
 
-async def clear_datas(CONFIG: Any):
+def clear_datas(CONFIG: Any):
     CONFIG["opened_tasks"] = []
+    return CONFIG

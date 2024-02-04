@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
     GroupMessageEvent
 )
+from nonebot.message import run_preprocessor
 from nonebot.rule import to_me
 from nonebot.params import Matcher, RegexGroup
 from nonebot.log import logger
@@ -39,9 +40,9 @@ __plugin_meta__ = PluginMetadata(
     description="主要用来提醒大家别忘记什么事情，可以看成定时提醒插件",
     usage='''
     定时 [date]→ 设置定时提醒，date为时间，格式为HH:MM，如 23:59， 不设置默认为17点 \n
-    定时列表 → 列出所有定时提醒 \n
+    定时列表 [page] → 列出设置的定时提醒\n
     清空定时 → 清空所有定时提醒 \n
-    定时jobs  → 列出底层任务情况 \n
+    定时jobs [page]  → 列出底层任务情况 \n
     定时请求  → 定时请求数据，目前支持图片 \n
     执行/删除/开启/关闭定时 [id] → 执行/删除/开启/关闭指定id的定时提醒
     ''',
@@ -76,7 +77,7 @@ logger.opt(colors=True).info(
 
 remainer_matcher = on_regex(r"^定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
 fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
-list_matcher = on_regex(r"^定时[\s]*列表", priority=999,rule=to_me())
+list_matcher = on_regex(r"^定时[\s]*列表(\d+)?", priority=999,rule=to_me())
 list_apsjob_matcher = on_regex(r"^定时jobs", priority=999,rule=to_me())
 clear_matcher = on_regex(r"^清(空|除)定时", priority=999,rule=to_me())
 turn_matcher = on_regex(rf"^(开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
@@ -195,13 +196,25 @@ async def update_handler2(
 async def list_matcher_handle(
     bot: Bot,
     event: MessageEvent,
-    matcher: Matcher
+    matcher: Matcher,
+    args: Tuple[Optional[int], ...] = RegexGroup(),
 ):
+    page = args[0] if len(args) > 0 and args[0] else 1
+    pageSize = plugin_config.reminder_page_size
+    startIdx = (page - 1) * pageSize
     msg = Message("")
     logger.opt(colors=True).info(
         f"CONFIG['opened_tasks']: {CONFIG['opened_tasks']}"
     )
-    for item in CONFIG["opened_tasks"]:
+    msg.append(f"共计{len(CONFIG['opened_tasks'])}个定时提醒 \n\
+-------------------------\n")
+    
+    # 分页返回
+    for idx in range(startIdx, len(CONFIG["opened_tasks"])):
+        if idx < (page - 1) * pageSize or idx >= page * pageSize:
+            break
+        item = CONFIG["opened_tasks"][idx]
+        
         msg.append(f"id: {item['id']} \n\
 对象：{item['userId']} \n\
 群组: {item['groupId']} \n\
@@ -227,9 +240,9 @@ async def list_apsjob_matcher_handle(
     output = StringIO()
     if not scheduler:
         await matcher.finish("未安装软依赖nonebot_plugin_apscheduler，不能使用此功能")
-    scheduler.print_jobs(out=output)
-    
-    msg = Message(output.getvalue())
+    # scheduler.print_jobs(out=output)
+    # msg = Message(output.getvalue())
+    msg = Message(get_jobs_info())
     
     await sendReply(bot, matcher, event, msg)
 
@@ -277,7 +290,6 @@ async def _(
         if job:
             # 添加一个job并立即执行
             current_time = datetime.now()
-            # 给da加10秒
 
             # 加上 10 秒
             new_time = current_time + timedelta(seconds=10)
@@ -320,7 +332,7 @@ async def post_scheduler(user_id: int, groupId: int, msg: str, judgeWorkDay: boo
     await bot.send_private_msg(user_id=user_id, message=msg)
 
 
-async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0):
+async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0, id=None):
     if scheduler:
         ## 小时-分钟格式的时间提取出来
         hour, minute = time.split(":")
@@ -330,7 +342,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
         job = None
         plans = CONFIG["opened_tasks"]
 
-        useId = generateRandomId()
+        useId = id if id else generateRandomId()
 
         # 每天或工作日
         judgeWorkDay = False
@@ -338,7 +350,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             if repeat == '3':
                 judgeWorkDay = True
             job = scheduler.add_job(
-                post_scheduler, "cron", hour=hour, minute=minute, id=useId, args=[userId, groupId, data, judgeWorkDay, url]
+                post_scheduler, "cron", hour=hour, minute=minute, id=useId, replace_existing=True, args=[userId, groupId, data, judgeWorkDay, url]
             )
         
         # 某天
@@ -357,7 +369,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             
             job = scheduler.add_job(
                 post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
-                      args=[userId, groupId, data, judgeWorkDay, url]
+                    replace_existing=True,  args=[userId, groupId, data, judgeWorkDay, url]
             )
 
         if job is not None:
@@ -389,12 +401,9 @@ async def clearScheduler():
             if isVaildId(job.id):
                 scheduler.remove_job(job.id)
 
-# 先删除后添加新job
 async def updateScheduler(item: Any):
     id = item["id"]
-    CONFIG["opened_tasks"].remove(item)
-    await removeScheduler(id)
-    return await addScheduler(item["time"], item["data"], int(item["userId"]), item["repeat"], item["url"], int(item["groupId"]))
+    return await addScheduler(item["time"], item["data"], int(item["userId"]), item["repeat"], item["url"], int(item["groupId"]), id= id)
         
 def generateRandomId():
     characters = string.ascii_lowercase + string.digits
@@ -457,3 +466,55 @@ def isVaildId(id: str):
     if id is None or id == "":
         return False
     return id.lower().startswith(plugin_config.reminder_id_prefix.lower())
+
+
+@run_preprocessor
+async def recoverFromJson(event: MessageEvent, matcher: Matcher):
+    if CONFIG is None or len(CONFIG["opened_tasks"]) < 1:
+        return
+    jobs = scheduler.get_jobs()
+    # 判断是否已经存在计划任务，存在则说明已经初始化过了
+    for job in jobs:
+        if isVaildId(job.id):
+            logger.opt(colors=True).info(
+                f"已经初始化过了，不需要再次初始化，退出初始化任务"
+            )
+            return
+    
+    logger.opt(colors=True).info(
+        f"初始化定时任务，尝试从json中恢复定时任务"
+    )
+    try:
+        for item in CONFIG["opened_tasks"]:    
+            msg = Message("")
+            res = await updateScheduler(item)
+            if res is not None and res != "":
+                continue
+            else:
+                raise Exception("回复定时任务：设置失败")
+        logger.opt(colors=True).info(
+            f"<y>初始化定时任务完成</y>"
+        )
+        scheduler.print_jobs()
+    except Exception as e:
+        logger.error(f"尝试从json中恢复定时任务失败，error: {e}")
+        raise e
+
+def get_jobs_info(page: int = 1):
+    if scheduler:
+        jobs = scheduler.get_jobs()
+        pageSize = plugin_config.reminder_page_size
+        startIdx = (page - 1) * pageSize
+        msg = f"共计{len(jobs)}个定时任务\n"
+        for idx in range(startIdx, len(jobs)):
+            job = jobs[idx]
+            if idx < (page - 1) * pageSize or idx >= page * pageSize:
+                break
+            if isVaildId(job.id):
+                msg += "(本插件任务)"
+            else:
+                msg += "(非本插件任务)"
+            msg += f"jobId: {job.id} \n\
+trigger:{job.trigger} \n\
+下次运行时间: {job.next_run_time}\n"
+        return msg
