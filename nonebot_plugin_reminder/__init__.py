@@ -31,7 +31,7 @@ from nonebot.plugin import PluginMetadata
 from io import StringIO
 from nonebot.typing import T_State
 from nonebot.adapters import MessageTemplate
-
+from .data_utils import get_datas, save_datas, clear_datas
 __version__ = "0.1.1"
 
 __plugin_meta__ = PluginMetadata(
@@ -61,16 +61,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 plugin_config = Config.parse_obj(get_driver().config)
-
-config_path = Path("config/remain_plugin.json")
-config_path.parent.mkdir(parents=True, exist_ok=True)
-if config_path.exists():
-    with open(config_path, "r", encoding="utf8") as f:
-        CONFIG: Dict[str, List] = json.load(f)
-else:
-    CONFIG: Dict[str, List] = {"opened_tasks": []}
-    with open(config_path, "w", encoding="utf8") as f:
-        json.dump(CONFIG, f, ensure_ascii=False, indent=4)
+CONFIG = get_datas()
 
 try:
     scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -249,10 +240,8 @@ async def clear_matcher_handle(
     matcher: Matcher
 ):
     await clearScheduler()
-    CONFIG["opened_tasks"] = []
-    async with lock:
-        async with aiofiles.open(config_path, "w", encoding="utf8") as f:
-            await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
+    clear_datas(CONFIG=CONFIG)
+    await save_datas(CONFIG=CONFIG)
 
     await sendReply(bot, matcher, event, "已清空所有定时提醒")
 
@@ -282,7 +271,7 @@ async def _(
         setScheduler(schId, 0)
     elif mode == "删除":
         CONFIG["opened_tasks"].remove(item)
-        removeScheduler(schId)
+        await removeScheduler(schId)
     elif mode == "执行":
         job = scheduler.get_job(schId)
         if job:
@@ -296,9 +285,7 @@ async def _(
             await sendReply(bot, matcher, event, f"正在执行{schId}的定时提醒")
             # new_job = scheduler.run_job(job, 'date', next_run_time=datetime.now())
                    
-    async with lock:
-        async with aiofiles.open(config_path, "w", encoding="utf8") as f:
-            await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
+    await save_datas(CONFIG=CONFIG)
 
     await sendReply(bot, matcher, event, f"已成功{mode}{schId}的定时提醒")
 
@@ -334,11 +321,6 @@ async def post_scheduler(user_id: int, groupId: int, msg: str, judgeWorkDay: boo
 
 
 async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0):
-    # # 重置
-    # scheduler.remove_all_jobs()
-    # CONFIG: Dict[str, List] = {"opened_tasks": []}
-    # async with aiofiles.open(config_path, "w", encoding="utf8") as f:
-    #     await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
     if scheduler:
         ## 小时-分钟格式的时间提取出来
         hour, minute = time.split(":")
@@ -381,8 +363,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
         if job is not None:
             plans.append({"id": job.id, "time": time, "data": data, \
                 "repeat": repeat, "userId": userId, "groupId": groupId, "url": url, "status": 1})
-            async with aiofiles.open(config_path, "w", encoding="utf8") as f:
-                await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
+            await save_datas(CONFIG=CONFIG)
             return {"code": 0, "msg": job.id}
             
 async def setScheduler(id: str, status: int = 1):
@@ -393,6 +374,9 @@ async def setScheduler(id: str, status: int = 1):
             scheduler.reschedule_job(id)
             
 async def removeScheduler(id: str):
+    logger.opt(colors=True).info(
+        f"<g>删除定时{id}</g>"
+    )
     if scheduler and isVaildId(id):
         scheduler.remove_job(id)
         
@@ -409,7 +393,7 @@ async def clearScheduler():
 async def updateScheduler(item: Any):
     id = item["id"]
     CONFIG["opened_tasks"].remove(item)
-    removeScheduler(id)
+    await removeScheduler(id)
     return await addScheduler(item["time"], item["data"], int(item["userId"]), item["repeat"], item["url"], int(item["groupId"]))
         
 def generateRandomId():

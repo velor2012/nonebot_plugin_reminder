@@ -105,7 +105,7 @@ NoneBot 配置相关教程详见 [配置 | NoneBot](https://v2.nonebot.dev/docs/
 
 ## 依赖
 - [`nonebot-plugin-apscheduler`](https://github.com/nonebot/plugin-apscheduler): 使用定时发送功能
-
+- [`nonebot-plugin-localstore`](https://github.com/nonebot/plugin-localstore): 使用存储功能
 ## 致谢
 
 代码基于 [nonebot-plugin-everyday-en](https://github.com/MelodyYuuka/nonebot_plugin_everyday_en)，感谢原作者的开源精神！
