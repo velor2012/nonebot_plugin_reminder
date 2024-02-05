@@ -10,7 +10,6 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
     GroupMessageEvent
 )
-from nonebot.message import run_preprocessor
 from nonebot.rule import to_me
 from nonebot.params import Matcher, RegexGroup
 from nonebot.log import logger
@@ -60,8 +59,8 @@ __plugin_meta__ = PluginMetadata(
     # 支持的适配器集合，其中 `~` 在此处代表前缀 `nonebot.adapters.`，其余适配器亦按此格式填写。
     # 若插件可以保证兼容所有适配器（即仅使用基本适配器功能）可不填写，否则应该列出插件支持的适配器。
 )
-
-plugin_config = Config.parse_obj(get_driver().config)
+driver = get_driver()
+plugin_config = Config.parse_obj(driver.config)
 CONFIG = get_datas()
 
 try:
@@ -204,16 +203,17 @@ async def list_matcher_handle(
     startIdx = (page - 1) * pageSize
     msg = Message("")
     logger.opt(colors=True).info(
-        f"CONFIG['opened_tasks']: {CONFIG['opened_tasks']}"
+        f"CONFIG: {CONFIG}"
     )
-    msg.append(f"共计{len(CONFIG['opened_tasks'])}个定时提醒 \n\
+    msg.append(f"共计{len(CONFIG)}个定时提醒 \n\
 -------------------------\n")
     
     # 分页返回
-    for idx in range(startIdx, len(CONFIG["opened_tasks"])):
+    items = list(CONFIG.values())
+    for idx in range(startIdx, len(items)):
         if idx < (page - 1) * pageSize or idx >= page * pageSize:
             break
-        item = CONFIG["opened_tasks"][idx]
+        item = items[idx]
         
         msg.append(f"id: {item['id']} \n\
 对象：{item['userId']} \n\
@@ -283,7 +283,7 @@ async def _(
         item["status"] = 0
         setScheduler(schId, 0)
     elif mode == "删除":
-        CONFIG["opened_tasks"].remove(item)
+        CONFIG.pop(schId, {})
         await removeScheduler(schId)
     elif mode == "执行":
         job = scheduler.get_job(schId)
@@ -340,7 +340,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             f"已设定于 <y>{str(hour).rjust(2, '0')}:{str(minute).rjust(2, '0')}</y> 定时发送提醒"
         )
         job = None
-        plans = CONFIG["opened_tasks"]
+        plans = CONFIG
 
         useId = id if id else generateRandomId()
 
@@ -373,8 +373,8 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             )
 
         if job is not None:
-            plans.append({"id": job.id, "time": time, "data": data, \
-                "repeat": repeat, "userId": userId, "groupId": groupId, "url": url, "status": 1})
+            plans[job.id] = {"id": job.id, "time": time, "data": data, \
+                "repeat": repeat, "userId": userId, "groupId": groupId, "url": url, "status": 1}
             await save_datas(CONFIG=CONFIG)
             return {"code": 0, "msg": job.id}
             
@@ -457,9 +457,8 @@ async def sendReply(bot: Bot, matcher: Matcher, event: GroupMessageEvent, msg: M
     await matcher.finish(msg) 
 
 def findJobFromJSONById(id: str):
-    for item in CONFIG["opened_tasks"]:
-        if item["id"] == id:
-            return item
+    if id in CONFIG:
+        return CONFIG[id]
     return None
 
 def isVaildId(id: str):
@@ -468,9 +467,9 @@ def isVaildId(id: str):
     return id.lower().startswith(plugin_config.reminder_id_prefix.lower())
 
 
-@run_preprocessor
-async def recoverFromJson(event: MessageEvent, matcher: Matcher):
-    if CONFIG is None or len(CONFIG["opened_tasks"]) < 1:
+@driver.on_startup
+async def recoverFromJson():
+    if CONFIG is None or len(CONFIG) < 1:
         return
     jobs = scheduler.get_jobs()
     # 判断是否已经存在计划任务，存在则说明已经初始化过了
@@ -485,8 +484,8 @@ async def recoverFromJson(event: MessageEvent, matcher: Matcher):
         f"初始化定时任务，尝试从json中恢复定时任务"
     )
     try:
-        for item in CONFIG["opened_tasks"]:    
-            msg = Message("")
+        for key in CONFIG:    
+            item = CONFIG[key]
             res = await updateScheduler(item)
             if res is not None and res != "":
                 continue

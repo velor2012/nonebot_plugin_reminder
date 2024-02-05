@@ -14,9 +14,9 @@ lock = asyncio.Lock()
 def get_datas():
     if data_file.exists():
         with open(data_file, "r", encoding="utf8") as f:
-            CONFIG: Dict[str, List] = json.load(f)
+            CONFIG: Dict[str, dict] = json.load(f)
     else:
-        CONFIG: Dict[str, List] = {"opened_tasks": []}
+        CONFIG: Dict[str, dict] = {}
         with open(data_file, "w", encoding="utf8") as f:
             json.dump(CONFIG, f, ensure_ascii=False, indent=4)
     return CONFIG
@@ -26,5 +26,5 @@ async def save_datas(CONFIG: Any):
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
 
 def clear_datas(CONFIG: Any):
-    CONFIG["opened_tasks"] = []
+    CONFIG = {}
     return CONFIG

@@ -1,1 +1,0 @@
-{"apscheduler.jobstores.default":{"type":"sqlalchemy","url":"sqlite:///jobs.sqlite"}}
