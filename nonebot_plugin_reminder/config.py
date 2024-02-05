@@ -1,6 +1,6 @@
-from pydantic import BaseSettings
+from pydantic import BaseModel
 
-class Config(BaseSettings):
+class Config(BaseModel):
     reminder_default_hour: int = 17
     reminder_default_minute: int = 0
     reminder_id_len:int = 5
