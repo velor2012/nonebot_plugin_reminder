@@ -31,7 +31,7 @@ from nonebot.plugin import PluginMetadata
 from io import StringIO
 from nonebot.typing import T_State
 from nonebot.adapters import MessageTemplate
-from .data_utils import get_datas, save_datas, clear_datas
+from .data_utils import get_datas, save_datas, clear_datas, item2string
 __version__ = "0.1.1"
 
 __plugin_meta__ = PluginMetadata(
@@ -79,7 +79,7 @@ fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,
 list_matcher = on_regex(r"^定时[\s]*列表(\d+)?", priority=999,rule=to_me())
 list_apsjob_matcher = on_regex(r"^定时jobs", priority=999,rule=to_me())
 clear_matcher = on_regex(r"^清(空|除)定时", priority=999,rule=to_me())
-turn_matcher = on_regex(rf"^(开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+turn_matcher = on_regex(rf"^(查看|开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 update_matcher = on_regex(rf"^(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 
 lock = asyncio.Lock()
@@ -215,15 +215,7 @@ async def list_matcher_handle(
             break
         item = items[idx]
         
-        msg.append(f"id: {item['id']} \n\
-对象：{item['userId']} \n\
-群组: {item['groupId']} \n\
-内容: { item['data'] } \n\
-URL: {item['url']} \n\
-周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] } \n\
-时间: {item['time']} \n\
-状态: {'开启' if item['status'] == 1 else '关闭'} \n\
--------------------------\n")
+        msg.append(item2string(item))
 
     if(msg.extract_plain_text() == ""):
         msg.append("没有定时提醒")
@@ -273,6 +265,8 @@ async def _(
         await sendReply(bot, matcher, event, "请输入具体的id")
     
     item = findJobFromJSONById(schId)
+    if item is None:
+        await sendReply(bot, matcher, event, "未找到该id的定时提醒")
         
     if mode == "开启":
         if item["status"] == 1:
@@ -285,6 +279,8 @@ async def _(
     elif mode == "删除":
         CONFIG.pop(schId, {})
         await removeScheduler(schId)
+    elif mode == "查看":
+        await sendReply(bot, matcher, event, item2string(item))
     elif mode == "执行":
         job = scheduler.get_job(schId)
         if job:
