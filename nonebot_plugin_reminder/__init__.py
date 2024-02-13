@@ -519,6 +519,8 @@ trigger:{job.trigger} \n\
         return msg
 
 async def sendReply(msg: MessageSegmentFactory, target: PlatformTarget):
+    if(isinstance(msg, str)):
+        msg = Text(msg) 
     if target and target.platform_type == targetTypes.get("qqGroup"):
         await msg.send(reply=True, at_sender=True)
     else:
