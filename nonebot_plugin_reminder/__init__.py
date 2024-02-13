@@ -10,11 +10,12 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
     GroupMessageEvent
 )
+# TODO: 使用nonebot_plugin_saa代替nonebot11完成跨平台开发 https://send-anything-anywhere.felinae98.cn/
 from nonebot.rule import to_me
 from nonebot.params import Matcher, RegexGroup
 from nonebot.log import logger
 from nonebot.permission import SUPERUSER
-from nonebot import require, get_driver, get_bot
+from nonebot import require, get_driver, get_bot, get_bots
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from datetime import date, datetime, timedelta
@@ -108,7 +109,7 @@ async def remainer_handler(
     if isinstance(event, GroupMessageEvent):
         groupId = event.group_id
     try:
-        res = await addScheduler(arg1, word, event.user_id, groupId=groupId, repeat=repeat, url=url)
+        res = await addScheduler(bot, arg1, word, event.user_id, groupId=groupId, repeat=repeat, url=url)
         logger.opt(colors=True).debug(
             f"addScheduler.res: {res}"
         )
@@ -297,7 +298,7 @@ async def _(
 
     await sendReply(bot, matcher, event, f"已成功{mode}{schId}的定时提醒")
 
-async def post_scheduler(user_id: int, groupId: int, msg: str, judgeWorkDay: bool = False, url: str = None):
+async def post_scheduler(botId: str, user_id: int, groupId: int, msg: str, judgeWorkDay: bool = False, url: str = None):
     logger.opt(colors=True).debug(
         f"执行任务<g>url: {url} msg:{msg}</g>"
     )
@@ -314,7 +315,7 @@ async def post_scheduler(user_id: int, groupId: int, msg: str, judgeWorkDay: boo
         )
         msg = Message(msg) + Message(msg_img)
     
-    bot: Bot = get_bot()
+    bot = get_bot(self_id=botId)
     if(groupId > 0):
         msg = Message(msg)
         if user_id > 0:
@@ -328,7 +329,7 @@ async def post_scheduler(user_id: int, groupId: int, msg: str, judgeWorkDay: boo
     await bot.send_private_msg(user_id=user_id, message=msg)
 
 
-async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0, id=None):
+async def addScheduler(bot: Bot, time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0, id=None):
     if scheduler:
         ## 小时-分钟格式的时间提取出来
         hour, minute = time.split(":")
@@ -346,7 +347,7 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             if repeat == '3':
                 judgeWorkDay = True
             job = scheduler.add_job(
-                post_scheduler, "cron", hour=hour, minute=minute, id=useId, replace_existing=True, args=[userId, groupId, data, judgeWorkDay, url]
+                post_scheduler, "cron", hour=hour, minute=minute, id=useId, replace_existing=True, args=[bot.self_id, userId, groupId, data, judgeWorkDay, url]
             )
         
         # 某天
@@ -365,11 +366,11 @@ async def addScheduler(time: str, data: str, userId: int , repeat: str = 1, url:
             
             job = scheduler.add_job(
                 post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
-                    replace_existing=True,  args=[userId, groupId, data, judgeWorkDay, url]
+                    replace_existing=True,  args=[bot.self_id, userId, groupId, data, judgeWorkDay, url]
             )
 
         if job is not None:
-            plans[job.id] = {"id": job.id, "time": time, "data": data, \
+            plans[job.id] = {"id": job.id, "bot":bot.self_id, "time": time, "data": data, \
                 "repeat": repeat, "userId": userId, "groupId": groupId, "url": url, "status": 1}
             await save_datas(CONFIG=CONFIG)
             return {"code": 0, "msg": job.id}
@@ -399,7 +400,11 @@ async def clearScheduler():
 
 async def updateScheduler(item: Any):
     id = item["id"]
-    return await addScheduler(item["time"], item["data"], int(item["userId"]), item["repeat"], item["url"], int(item["groupId"]), id= id)
+    botId = item["bot"]
+    bot = get_bot(self_id=botId)
+    if bot is None:
+        return {"code": -1, "msg": f"bot已经未链接"}
+    return await addScheduler(bot, item["time"], item["data"], int(item["userId"]), item["repeat"], item["url"], int(item["groupId"]), id= id)
         
 def generateRandomId():
     characters = string.ascii_lowercase + string.digits

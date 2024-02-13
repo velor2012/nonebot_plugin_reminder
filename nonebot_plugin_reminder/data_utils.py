@@ -32,6 +32,7 @@ def clear_datas(CONFIG: Any):
 def item2string(item: Any):
     return f"id: {item['id']} \n\
     对象：{item['userId']} \n\
+    报送机器人：{item['bot']} \n\
     群组: {item['groupId']} \n\
     内容: { item['data'] } \n\
     URL: {item['url']} \n\
