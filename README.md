@@ -122,13 +122,7 @@ NoneBot 配置相关教程详见 [配置 | NoneBot](https://v2.nonebot.dev/docs/
 代码基于 [nonebot-plugin-everyday-en](https://github.com/MelodyYuuka/nonebot_plugin_everyday_en)，感谢原作者的开源精神！
 
 ## 其他
-修改定时的时候，userId(QQ号)表示需要回复定时消息给谁，私聊的时候就是自己本人，群聊的时候就是@机器人的那个群友。类似的，groupId表示群号，让机器人可以知道回复到哪个群。
-
-这里有三种情况：
-
-1. userId > 0，groupId > 0，表示定时任务出发之后@群中的某个群友回复
-2. userId > 0，groupId < 0，表示定时任务出发之后私聊某个人回复
-3. userId < 0，groupId > 0，表示定时任务出发在群直接回复，不@群友
+修改定时的时候，私聊对象和群组只能二选一。
 
 ## 开源许可
 
