@@ -10,6 +10,7 @@ from nonebot.permission import SUPERUSER
 from nonebot import require, get_driver, get_bot, get_bots
 from nonebot.adapters import Message, Event, Bot
 from typing import Any, Dict, List, Optional, Tuple
+from nonebot.adapters.onebot.v11 import MessageEvent
 from pathlib import Path
 from datetime import date, datetime, timedelta
 import asyncio
@@ -71,14 +72,14 @@ logger.opt(colors=True).info(
     if scheduler
     else "未检测到软依赖<y>nonebot_plugin_apscheduler</y>，<r>禁用定时任务功能</r>"
 )
-
-remainer_matcher = on_regex(r"^定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
-fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
-list_matcher = on_regex(r"^定时[\s]*列表(\d+)?", priority=999,rule=to_me())
-list_apsjob_matcher = on_regex(r"^定时jobs", priority=999,rule=to_me())
-clear_matcher = on_regex(r"^清(空|除)定时", priority=999,rule=to_me())
-turn_matcher = on_regex(rf"^(查看|开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
-update_matcher = on_regex(rf"^(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+# ^(?:(?:\@.*))* 用于兼容一些插件，群聊时被@,没有去掉@的那一部分
+remainer_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
+fetch_matcher = on_regex(r"^(?:(?:\@.*))*定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
+list_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*列表(\d+)?", priority=999, rule=to_me())
+list_apsjob_matcher = on_regex(r"^(?:(?:\@.*))*定时jobs", priority=999,rule=to_me())
+clear_matcher = on_regex(r"^(?:(?:\@.*))*清(空|除)定时", priority=999,rule=to_me())
+turn_matcher = on_regex(rf"^(?:(?:\@.*))*(查看|开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+update_matcher = on_regex(rf"^(?:(?:\@.*))*(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 
 lock = asyncio.Lock()
 
@@ -220,7 +221,7 @@ async def list_matcher_handle(
     page = args[0] if len(args) > 0 and args[0] else 1
     pageSize = plugin_config.reminder_page_size
     startIdx = (page - 1) * pageSize
-    msg = Text("")
+    msg = ""
     logger.opt(colors=True).info(
         f"CONFIG: {CONFIG}"
     )
@@ -518,8 +519,6 @@ trigger:{job.trigger} \n\
         return msg
 
 async def sendReply(msg: MessageSegmentFactory, target: PlatformTarget):
-    if(isinstance(msg, str)):
-        msg = Text(msg)
     if target and target.platform_type == targetTypes.get("qqGroup"):
         await msg.send(reply=True, at_sender=True)
     else:
@@ -529,7 +528,7 @@ async def sendToReply(msg: MessageSegmentFactory, bot: Bot, target: PlatformTarg
         msg = Text(msg)
     if(useId is not None):
         mention = Mention(user_id=useId)
-        msg = msg + mention
+        msg = MessageFactory([msg, mention])
     if messageId is not None:
-        msg = msg + Reply(message_id=messageId)
+        msg = MessageFactory([msg, Reply(message_id=messageId)])
     await msg.send_to(bot=bot, target=target)
