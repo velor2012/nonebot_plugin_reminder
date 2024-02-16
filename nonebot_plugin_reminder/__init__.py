@@ -319,7 +319,7 @@ async def _(
 
     await sendReply(f"已成功{mode}{schId}的定时提醒",target)
 
-async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: bool = False, url: str = None):
+async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: bool = False, url: str = None, useId: str = None):
     logger.opt(colors=True).debug(
         f"执行任务<g>url: {url} msg:{msg}</g>"
     )
@@ -348,6 +348,9 @@ async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: 
         f"执行完成任务，发送给<g>target:{target_dict}</g>"
     )
     target = buildTarget(target_dict)
+    # 非循环的任务，执行后删除
+    if useId is not None and useId != "":
+        removeScheduler(id=useId)
     await sendToReply(msg= msg, bot = bot, target=target)
 
 
@@ -391,7 +394,7 @@ async def addScheduler(botId: str, target: SaaTarget, time: str, data: str, repe
             
             job = scheduler.add_job(
                 post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
-                    replace_existing=True,  args=[botId, target_dict, data, judgeWorkDay, url]
+                    replace_existing=True,  args=[botId, target_dict, data, judgeWorkDay, url, useId]
             )
 
         if job is not None:
@@ -412,8 +415,12 @@ async def removeScheduler(id: str):
         f"<g>删除定时{id}</g>"
     )
     if scheduler and isVaildId(id):
-        scheduler.remove_job(id)
-        
+        try:
+            scheduler.remove_job(id)
+        except Exception as e:
+            logger.opt(colors=True).debug(
+                f"删除定时任务出错，error: {e}"
+            )
 async def clearScheduler():
     if scheduler:
         jobs = scheduler.get_jobs()
