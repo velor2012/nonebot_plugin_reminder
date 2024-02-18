@@ -329,7 +329,7 @@ async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: 
                 f"今天不是工作日，不发送提醒"
             )
             return
-    if url is not None and url != "":
+    if url is not None and url != "" and isUrlSupport(url):
         msg_img = Image(url)
         logger.opt(colors=True).debug(
             f"获取图片成功"
