@@ -1,4 +1,3 @@
-import datetime
 import random
 import string
 from nonebot.plugin import on_regex
@@ -26,7 +25,7 @@ from nonebot.plugin import PluginMetadata
 from io import StringIO
 from nonebot.typing import T_State
 from nonebot.adapters import MessageTemplate
-from .data_utils import get_datas, save_datas, clear_datas, item2string
+from .data_utils import detail_backup, get_datas, save_datas, clear_datas, item2string, backup, recover, list_backup
 require("nonebot_plugin_saa")
 from nonebot_plugin_saa import Text, MessageFactory, Image, \
 SaaTarget, PlatformTarget, TargetQQGroup, TargetQQPrivate, MessageSegmentFactory, \
@@ -76,10 +75,14 @@ logger.opt(colors=True).info(
 remainer_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
 fetch_matcher = on_regex(r"^(?:(?:\@.*))*定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
 list_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*列表(\d+)?", priority=999, rule=to_me())
-list_apsjob_matcher = on_regex(r"^(?:(?:\@.*))*定时jobs", priority=999,rule=to_me())
-clear_matcher = on_regex(r"^(?:(?:\@.*))*清(空|除)定时", priority=999,rule=to_me())
+list_apsjob_matcher = on_regex(r"^(?:(?:\@.*))*定时jobs$", priority=999,rule=to_me())
+clear_matcher = on_regex(r"^(?:(?:\@.*))*清(空|除)定时$", priority=999,rule=to_me())
 turn_matcher = on_regex(rf"^(?:(?:\@.*))*(查看|开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 update_matcher = on_regex(rf"^(?:(?:\@.*))*(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+backup_matcher = on_regex(rf"^(?:(?:\@.*))*(备份定时|定时备份)$", priority=999, permission=SUPERUSER,rule=to_me())
+backup_list_matcher = on_regex(rf"^(?:(?:\@.*))*备份列表[\s]*(\d+)?", priority=999, permission=SUPERUSER,rule=to_me())
+backup_recover_matcher = on_regex(rf"^(?:(?:\@.*))*(备份恢复|恢复备份)[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+backup_detail_mathcer = on_regex(rf"^(?:(?:\@.*))*查看备份[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 
 lock = asyncio.Lock()
 
@@ -253,14 +256,92 @@ async def list_apsjob_matcher_handle(
         msg = Text(get_jobs_info())
     
     await sendReply(msg, target)
+    
+@backup_matcher.handle()
+async def backup_matcher_handle(
+    target: SaaTarget
+):
+    try:
+        res = await backup(CONFIG, plugin_config.reminder_bk_size)
+    except Exception as e:
+        res = f"备份失败: {e}"
+    msg = Text(res)
+    
+    await sendReply(msg, target)
 
-@clear_matcher.handle()
+@backup_list_matcher.handle()
+async def backup_matcher_handle(
+    target: SaaTarget,
+    args: Tuple[Optional[int], ...] = RegexGroup()
+):
+    page = args[0] if len(args) > 0 and args[0] else 1
+    pageSize = plugin_config.reminder_page_size
+    try:
+        res = await list_backup(page_size=pageSize, page=page)
+    except Exception as e:
+        res = f"获取备份列表失败: {e}"
+    msg = Text(res)
+    
+    await sendReply(msg, target)
+
+@backup_detail_mathcer.handle()
+async def backup_detail_matcher_handle(
+    target: SaaTarget,
+    args: Tuple[Optional[str], ...] = RegexGroup(),
+):
+    bkId = args[0] if args[0] else None
+    page = args[1] if len(args) > 1 and args[1] else 1
+    pageSize = plugin_config.reminder_page_size
+    
+    global CONFIG
+    try:
+        res = await detail_backup(bkId, page_size=pageSize, page=page)
+    except Exception as e:
+        res = f"获取备份失败: {e}"
+    msg = Text(res)
+    await sendReply(msg, target)
+
+@backup_recover_matcher.got("confirm", prompt="确定恢复备份？(y|n)")
+async def backup_recover_handle(
+    bot: Bot,
+    event: Event,
+    matcher: Matcher,
+    target: SaaTarget,
+    confirm = ArgPlainText(),
+    args: Tuple[Optional[str], ...] = RegexGroup(),
+):
+    bkId = args[0] if args[0] else None
+
+    # 去掉前后的空白字符
+    confirm = confirm.strip().lower()
+    if(confirm != "y"):
+        await sendReply("取消操作",target)
+        return
+    
+    global CONFIG
+    try:
+        res = await recover(bkId)
+        CONFIG = get_datas()
+    except Exception as e:
+        res = f"恢复备份失败: {e}"
+    msg = Text(res)
+    await sendReply(msg, target)
+
+
+@clear_matcher.got("confirm", prompt="确定清除定时(y|n)")
 async def clear_matcher_handle(
     bot: Bot,
     event: Event,
     matcher: Matcher,
     target: SaaTarget,
+    confirm: str = ArgPlainText(),
 ):
+    # 去掉前后的空白字符
+    confirm = confirm.strip().lower()
+    if(confirm != "y"):
+        await sendReply("取消操作",target)
+        return
+    
     global CONFIG
     await clearScheduler()
     CONFIG = clear_datas(CONFIG=CONFIG)
@@ -351,6 +432,9 @@ async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: 
     # 非循环的任务，执行后删除
     if useId is not None and useId != "":
         removeScheduler(id=useId)
+        logger.opt(colors=True).debug(
+            f"<y>执行完成任务{useId}，清除记录</y>"
+        )
     await sendToReply(msg= msg, bot = bot, target=target)
 
 
