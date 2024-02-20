@@ -9,7 +9,6 @@ from nonebot.permission import SUPERUSER
 from nonebot import require, get_driver, get_bot, get_bots
 from nonebot.adapters import Message, Event, Bot
 from typing import Any, Dict, List, Optional, Tuple
-from nonebot.adapters.onebot.v11 import MessageEvent
 from pathlib import Path
 from datetime import date, datetime, timedelta
 import asyncio
