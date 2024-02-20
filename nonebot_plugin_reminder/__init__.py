@@ -74,14 +74,14 @@ logger.opt(colors=True).info(
 # ^(?:(?:\@.*))* 用于兼容一些插件，群聊时被@,没有去掉@的那一部分
 remainer_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
 fetch_matcher = on_regex(r"^(?:(?:\@.*))*定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
-list_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*列表(\d+)?", priority=999, rule=to_me())
+list_matcher = on_regex(r"^(?:(?:\@.*))*定时列表[\s]*(\d+)?", priority=999, rule=to_me())
 list_apsjob_matcher = on_regex(r"^(?:(?:\@.*))*定时jobs$", priority=999,rule=to_me())
 clear_matcher = on_regex(r"^(?:(?:\@.*))*清(空|除)定时$", priority=999,rule=to_me())
 turn_matcher = on_regex(rf"^(?:(?:\@.*))*(查看|开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 update_matcher = on_regex(rf"^(?:(?:\@.*))*(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 backup_matcher = on_regex(rf"^(?:(?:\@.*))*(备份定时|定时备份)$", priority=999, permission=SUPERUSER,rule=to_me())
 backup_list_matcher = on_regex(rf"^(?:(?:\@.*))*备份列表[\s]*(\d+)?", priority=999, permission=SUPERUSER,rule=to_me())
-backup_recover_matcher = on_regex(rf"^(?:(?:\@.*))*(备份恢复|恢复备份)[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+backup_recover_matcher = on_regex(rf"^(?:(?:\@.*))*(?:备份恢复|恢复备份|还原备份|备份还原|使用备份|备份使用)[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 backup_detail_mathcer = on_regex(rf"^(?:(?:\@.*))*查看备份[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 
 lock = asyncio.Lock()
@@ -222,17 +222,21 @@ async def list_matcher_handle(
     args: Tuple[Optional[int], ...] = RegexGroup(),
 ):
     page = args[0] if len(args) > 0 and args[0] else 1
+    page = int(page)
     pageSize = plugin_config.reminder_page_size
     startIdx = (page - 1) * pageSize
     msg = ""
-    logger.opt(colors=True).info(
-        f"CONFIG: {CONFIG}"
-    )
+    # logger.opt(colors=True).info(
+    #     f"CONFIG: {CONFIG}"
+    # )
     msg += f"共计{len(CONFIG)}个定时提醒 \n\
 -------------------------\n"
     
     # 分页返回
     items = list(CONFIG.values())
+    logger.opt(colors=True).info(
+        f"<y>args:{args} startIdx: {startIdx}, len(items):{len(items)}, pageSize:{pageSize}, page:{page}</y>"
+    )
     for idx in range(startIdx, len(items)):
         if idx < (page - 1) * pageSize or idx >= page * pageSize:
             break
@@ -275,13 +279,16 @@ async def backup_matcher_handle(
     args: Tuple[Optional[int], ...] = RegexGroup()
 ):
     page = args[0] if len(args) > 0 and args[0] else 1
+    page = int(page)
     pageSize = plugin_config.reminder_page_size
     try:
         res = await list_backup(page_size=pageSize, page=page)
     except Exception as e:
         res = f"获取备份列表失败: {e}"
+    if(res is None or res == ""):
+        res = "没有备份"
+        
     msg = Text(res)
-    
     await sendReply(msg, target)
 
 @backup_detail_mathcer.handle()
@@ -322,6 +329,8 @@ async def backup_recover_handle(
     try:
         res = await recover(bkId)
         CONFIG = get_datas()
+        await clearScheduler()
+        await recoverFromJson()
     except Exception as e:
         res = f"恢复备份失败: {e}"
     msg = Text(res)

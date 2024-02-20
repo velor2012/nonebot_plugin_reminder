@@ -64,9 +64,6 @@ async def backup(config: Dict[str, Any] = None, maxBkNum:int = 2):
         # 以时间戳为后缀命名
         date = int(time())
         next_file = Path.joinpath(bkdir, f"backup_{date}.json")
-        logger.opt(colors=True).debug(
-            f"<y>backup 路径：{next_file}</y>"
-        )
         await save_datas(data, next_file)
         return "备份成功"
     except Exception as e:
@@ -84,8 +81,6 @@ async def recover(filename: str):
             with open(filename, "r", encoding="utf8") as f:
                 data = json.load(f)
             await save_datas(data)
-            # 删除备份
-            filename.unlink()
             return "恢复成功"
         else:
             return "文件不存在"
