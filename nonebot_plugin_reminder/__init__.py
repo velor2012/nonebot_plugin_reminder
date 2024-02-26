@@ -443,6 +443,9 @@ async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: 
         logger.opt(colors=True).debug(
             f"<y>执行完成任务{useId}，清除记录</y>"
         )
+        CONFIG.pop(useId, {})
+        await save_datas(CONFIG=CONFIG)
+        
     await sendToReply(msg= msg, bot = bot, target=target)
 
 
