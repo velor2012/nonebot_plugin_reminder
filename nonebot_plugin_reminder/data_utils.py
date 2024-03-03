@@ -9,7 +9,8 @@ import nonebot_plugin_localstore as store
 from time import time
 from pathlib import Path
 lock = asyncio.Lock()
-data_file = store.get_data_file("nonebot_plugin_reminder","remain_plugin.json")
+plugin_name = 'nonebot_plugin_rain_forecast'
+data_file = store.get_data_file(plugin_name,"remain_plugin.json")
 def get_datas(filepath: Path = None):
     if filepath is None:
         filepath = data_file
@@ -50,7 +51,7 @@ async def backup(config: Dict[str, Any] = None, maxBkNum:int = 2):
             data = get_datas()
         else:
             data = config
-        bkdir = store.get_data_dir("nonebot_plugin_reminder")
+        bkdir = store.get_data_dir(plugin_name)
         # 判断bkdir下面有多少backup文件，计算下一个文件名
         backup_files = [i for i in bkdir.iterdir() if i.is_file() and i.name.find("backup_") != -1]
         backup_files.sort() 
@@ -74,7 +75,7 @@ async def backup(config: Dict[str, Any] = None, maxBkNum:int = 2):
 async def recover(filename: str):
     try:
         data = None
-        bkdir = store.get_data_dir("nonebot_plugin_reminder")
+        bkdir = store.get_data_dir(plugin_name)
         # 执行mv命令
         filename = Path.joinpath(bkdir, filename + ".json")
         if filename.exists():
@@ -89,7 +90,7 @@ async def recover(filename: str):
     
 async def list_backup(page_size:int = 5, page:int = 1):
     try:
-        bkdir = store.get_data_dir("nonebot_plugin_reminder")
+        bkdir = store.get_data_dir(plugin_name)
         backup_files = [i.name for i in bkdir.iterdir() if i.is_file() and i.name.find("backup_") != -1]
         # 去掉后缀
         backup_files = [i.replace(".json", "") for i in backup_files]
@@ -106,7 +107,7 @@ async def detail_backup(filename: str, page_size:int = 5, page:int = 1):
         logger.opt(colors=True).debug(
             f"<y>detail_backup 进入获取备份函数</y>"
         )
-        bkdir = store.get_data_dir("nonebot_plugin_reminder")
+        bkdir = store.get_data_dir(plugin_name)
         filename = Path.joinpath(bkdir, filename + ".json")
         logger.opt(colors=True).debug(
             f"<y>detail_backup filename:{filename}</y>"
