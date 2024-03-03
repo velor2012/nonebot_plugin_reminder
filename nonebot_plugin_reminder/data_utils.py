@@ -9,7 +9,7 @@ import nonebot_plugin_localstore as store
 from time import time
 from pathlib import Path
 lock = asyncio.Lock()
-plugin_name = 'nonebot_plugin_rain_forecast'
+plugin_name = 'nonebot_plugin_reminder'
 data_file = store.get_data_file(plugin_name,"remain_plugin.json")
 def get_datas(filepath: Path = None):
     if filepath is None:
@@ -38,6 +38,7 @@ def item2string(item: Any):
     报送机器人：{item['bot']} \n\
     目标: {item['target']} \n\
     内容: { item['data'] } \n\
+    分类: { 'normal' if 'type' not in item else item['type'] } \n\
     URL: {item['url']} \n\
     周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] } \n\
     时间: {item['time']} \n\

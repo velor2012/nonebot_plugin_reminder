@@ -26,6 +26,7 @@ from nonebot.typing import T_State
 from nonebot.adapters import MessageTemplate
 from .data_utils import detail_backup, get_datas, save_datas, clear_datas, item2string, backup, recover, list_backup
 require("nonebot_plugin_saa")
+
 from nonebot_plugin_saa import Text, MessageFactory, Image, \
 SaaTarget, PlatformTarget, TargetQQGroup, TargetQQPrivate, MessageSegmentFactory, \
 Mention, Reply
@@ -59,6 +60,15 @@ __plugin_meta__ = PluginMetadata(
 driver = get_driver()
 plugin_config = Config.parse_obj(driver.config)
 CONFIG = get_datas()
+logger.opt(colors=True).info(
+    f"<y>CONFIG: {CONFIG}</y>"
+)
+
+
+if plugin_config.reminder_weather:
+    require("nonebot_plugin_heweather")
+    from nonebot_plugin_heweather import _ as weather
+
 
 try:
     scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -82,6 +92,7 @@ backup_matcher = on_regex(rf"^(?:(?:\@.*))*(备份定时|定时备份)$", priori
 backup_list_matcher = on_regex(rf"^(?:(?:\@.*))*备份列表[\s]*(\d+)?", priority=999, permission=SUPERUSER,rule=to_me())
 backup_recover_matcher = on_regex(rf"^(?:(?:\@.*))*(?:备份恢复|恢复备份|还原备份|备份还原|使用备份|备份使用)[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 backup_detail_mathcer = on_regex(rf"^(?:(?:\@.*))*查看备份[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
+weather_mathcer = on_regex(r"^(?:(?:\@.*))*定时天气[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
 
 lock = asyncio.Lock()
 
@@ -90,7 +101,42 @@ targetTypes: Dict[str, str] = {
     "qqPrivate": TargetQQPrivate(user_id=100101).platform_type,
 }
 
-
+@weather_mathcer.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
+async def weather_mathcer_handle(
+    matcher: Matcher,
+    bot: Bot,
+    event: Event,
+    target: SaaTarget,
+    args: Tuple[Optional[str]] = RegexGroup(),
+    repeat: str = ArgPlainText()
+):
+    
+    arg1 = args[0] if args[0] else f'{plugin_config.reminder_default_hour:02d}:{plugin_config.reminder_default_minute:02d}'
+    if not plugin_config.reminder_weather:
+        await sendReply("未开启天气提醒功能", target)
+        return
+    if not scheduler:
+        await sendReply("未安装软依赖nonebot_plugin_apscheduler，不能使用定时发送功能", target)
+        return
+    
+    if not bot:
+        sendReply(f"当前用户:{bot.self_id} 不是bot")
+    try:
+        res = await addScheduler(bot.self_id, target,  arg1, "", repeat=repeat, fn=weather, fnParamsArrs=[matcher, "天气深圳"])
+        logger.opt(colors=True).debug(
+            f"addScheduler.res: {res}"
+        )
+        if res is not None and res != "" and res["code"] != 0:
+            msg = Text(res['msg'])
+        else:
+            msg = Text("设置成功")
+    except Exception as e:
+        logger.exception(e)
+        msg = Text("设置失败")
+    
+    await sendReply(msg, target)
+    
+        
 @remainer_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
 @remainer_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
 async def remainer_handler(
@@ -449,7 +495,7 @@ async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: 
     await sendToReply(msg= msg, bot = bot, target=target)
 
 
-async def addScheduler(botId: str, target: SaaTarget, time: str, data: str, repeat: str = 1, url: str = None, id=None):
+async def addScheduler(botId: str, target: SaaTarget, time: str, data: str, repeat: str = 1, url: str = None, id=None, fn=None, fnParamsArrs=None):
     if scheduler:
         logger.opt(colors=True).debug(
             f"<y>target: {target} time:{time}</y>"
@@ -469,9 +515,15 @@ async def addScheduler(botId: str, target: SaaTarget, time: str, data: str, repe
         if repeat == '1' or repeat == '3':
             if repeat == '3':
                 judgeWorkDay = True
-            job = scheduler.add_job(
-                post_scheduler, "cron", hour=hour, minute=minute, id=useId, replace_existing=True, args=[botId, target_dict, data, judgeWorkDay, url]
-            )
+            if fn is not None:
+                job = scheduler.add_job(
+                    fn, "cron", hour=hour, minute=minute, id=useId, replace_existing=True, args=fnParamsArrs
+                )
+                # 不能保存job信息，因为请求天气的函数中matcher不支持序列化
+            else:
+                job = scheduler.add_job(
+                    post_scheduler, "cron", hour=hour, minute=minute, id=useId, replace_existing=True, args=[botId, target_dict, data, judgeWorkDay, url]
+                )
         
         # 某天
         else:
@@ -486,15 +538,19 @@ async def addScheduler(botId: str, target: SaaTarget, time: str, data: str, repe
                 day = date_object.day
             except ValueError:
                 return {"code": -1, "msg": f"日期格式错误，应为 yyyy-mm-dd，如 2021-01-01"}
-            
-            job = scheduler.add_job(
-                post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
-                    replace_existing=True,  args=[botId, target_dict, data, judgeWorkDay, url, useId]
-            )
-
+            if fn is not None:
+                job = scheduler.add_job(
+                    fn, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, replace_existing=True, args=fnParamsArrs
+                )
+            else:
+                job = scheduler.add_job(
+                    post_scheduler, "date", run_date=datetime(int(year), int(month), int(day), int(hour), int(minute), 0), id=useId, \
+                        replace_existing=True,  args=[botId, target_dict, data, judgeWorkDay, url, useId]
+                )
+        
         if job is not None:
             plans[job.id] = {"id": job.id, "bot":botId, "time": time, "data": data, \
-                "repeat": repeat, "target":target_dict, "url": url, "status": 1}
+                "repeat": repeat, "target":target_dict, "url": url, "status": 1, "type": "normal" if fn is None else 'weather'}
             await save_datas(CONFIG=CONFIG)
             return {"code": 0, "msg": job.id}
             
@@ -586,13 +642,23 @@ async def recoverFromJson():
         f"初始化定时任务，尝试从json中恢复定时任务"
     )
     try:
+        notNormalIds = []
         for key in CONFIG:    
             item = CONFIG[key]
+            if('type' in item):
+                if item['type'] != 'normal':
+                    notNormalIds.append(item["id"])
+                    continue
+                
             res = await updateScheduler(item)
             if res is not None and res != "":
                 continue
             else:
                 raise Exception("回复定时任务：设置失败")
+        for id in notNormalIds:
+            CONFIG.pop(id, {})
+            await save_datas(CONFIG=CONFIG)
+            
         logger.opt(colors=True).info(
             f"<y>初始化定时任务完成</y>"
         )
@@ -635,4 +701,7 @@ async def sendToReply(msg: MessageSegmentFactory, bot: Bot, target: PlatformTarg
         msg = MessageFactory([msg, mention])
     if messageId is not None:
         msg = MessageFactory([msg, Reply(message_id=messageId)])
-    await msg.send_to(bot=bot, target=target)
+    if bot is None:
+        await msg.send_to(bot=get_bot(), target=target)
+    else:
+        await msg.send_to(bot=bot, target=target)

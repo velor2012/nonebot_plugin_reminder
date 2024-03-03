@@ -13,6 +13,8 @@ class Config(BaseModel):
     reminder_page_size:int = 5
     # 最多有几个备份
     reminder_bk_size:int = 2
+    # 最多有几个备份
+    reminder_weather:bool = False
     
     class Config:
         extra = "ignore"
