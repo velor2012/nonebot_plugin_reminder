@@ -92,7 +92,7 @@ backup_matcher = on_regex(rf"^(?:(?:\@.*))*(备份定时|定时备份)$", priori
 backup_list_matcher = on_regex(rf"^(?:(?:\@.*))*备份列表[\s]*(\d+)?", priority=999, permission=SUPERUSER,rule=to_me())
 backup_recover_matcher = on_regex(rf"^(?:(?:\@.*))*(?:备份恢复|恢复备份|还原备份|备份还原|使用备份|备份使用)[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 backup_detail_mathcer = on_regex(rf"^(?:(?:\@.*))*查看备份[\s]*([_a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
-weather_mathcer = on_regex(r"^(?:(?:\@.*))*定时天气[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
+weather_mathcer = on_regex(r"^(?:(?:\@.*))*dstq[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
 
 lock = asyncio.Lock()
 
@@ -452,7 +452,7 @@ async def _(
                    
     await save_datas(CONFIG=CONFIG)
 
-    await sendReply(f"已成功{mode}{schId}的定时提醒",target)
+    # await sendReply(f"已成功{mode}{schId}的定时提醒",target)
 
 async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: bool = False, url: str = None, useId: str = None):
     logger.opt(colors=True).debug(
