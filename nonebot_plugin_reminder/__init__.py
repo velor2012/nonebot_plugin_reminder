@@ -406,8 +406,6 @@ async def _(
                    
     await save_datas(CONFIG=CONFIG)
 
-    await sendReply(f"已成功{mode}{schId}的定时提醒",target)
-
 async def post_scheduler(botId: str, target_dict: Dict, msg: str, judgeWorkDay: bool = False, url: str = None, useId: str = None):
     logger.opt(colors=True).debug(
         f"执行任务<g>url: {url} msg:{msg}</g>"
@@ -635,4 +633,7 @@ async def sendToReply(msg: MessageSegmentFactory, bot: Bot, target: PlatformTarg
         msg = MessageFactory([msg, mention])
     if messageId is not None:
         msg = MessageFactory([msg, Reply(message_id=messageId)])
-    await msg.send_to(bot=bot, target=target)
+    if bot is None:
+        await msg.send_to(bot=get_bot(), target=target)
+    else:
+        await msg.send_to(bot=bot, target=target)

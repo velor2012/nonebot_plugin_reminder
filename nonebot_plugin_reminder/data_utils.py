@@ -9,7 +9,7 @@ import nonebot_plugin_localstore as store
 from time import time
 from pathlib import Path
 lock = asyncio.Lock()
-plugin_name = 'nonebot_plugin_rain_forecast'
+plugin_name = 'nonebot_plugin_reminder'
 data_file = store.get_data_file(plugin_name,"remain_plugin.json")
 def get_datas(filepath: Path = None):
     if filepath is None:
