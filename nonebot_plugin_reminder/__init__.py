@@ -74,7 +74,7 @@ logger.opt(colors=True).info(
 remainer_matcher = on_regex(r"^(?:(?:\@.*))*定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
 fetch_matcher = on_regex(r"^(?:(?:\@.*))*定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
 list_matcher = on_regex(r"^(?:(?:\@.*))*定时列表[\s]*(\d+)?", priority=999, rule=to_me())
-list_apsjob_matcher = on_regex(r"^(?:(?:\@.*))*定时jobs$", priority=999,rule=to_me())
+list_apsjob_matcher = on_regex(r"^(?:(?:\@.*))*定时jobs[\s]*(\d+)?", priority=999,rule=to_me())
 clear_matcher = on_regex(r"^(?:(?:\@.*))*清(空|除)定时$", priority=999,rule=to_me())
 turn_matcher = on_regex(rf"^(?:(?:\@.*))*(查看|开启|关闭|删除|执行)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
 update_matcher = on_regex(rf"^(?:(?:\@.*))*(修改|更新)定时[\s]*({plugin_config.reminder_id_prefix + '_'}[a-zA-Z0-9]+)$", priority=999, permission=SUPERUSER,rule=to_me())
@@ -251,12 +251,15 @@ async def list_matcher_handle(
 @list_apsjob_matcher.handle()
 async def list_apsjob_matcher_handle(
     target: SaaTarget,
+    args: Tuple[Optional[int], ...] = RegexGroup(),
 ):
+    page = args[0] if len(args) > 0 and args[0] else 1
+    page = int(page)
     msg = None
     if not scheduler:
         msg = Text("未安装软依赖nonebot_plugin_apscheduler，不能使用此功能")
     else:
-        msg = Text(get_jobs_info())
+        msg = Text(get_jobs_info(page))
     
     await sendReply(msg, target)
     
