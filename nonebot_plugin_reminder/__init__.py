@@ -316,16 +316,16 @@ async def post_scheduler(botId: str, userId: int, groupId: int, msg: str, judgeW
         logger.opt(colors=True).debug(
             f"获取图片成功"
         )
-        Message(msg_img)
     
     bot = get_bot(self_id=botId)
     if(groupId > 0):
         msg = Message(msg)
-        if userId > 0:
-            msg.append(MessageSegment.at(userId))
+        # at定时者
+        # if userId > 0:
+        #     msg.append(MessageSegment.at(userId))
         await bot.send_group_msg(group_id=groupId, message=msg)
         if msg_img is not None:
-            await bot.send_group_msg(user_id=userId, message=msg_img)
+            await bot.send_group_msg(group_id=groupId, message=msg_img)
         return
     
     logger.opt(colors=True).debug(
@@ -343,7 +343,6 @@ async def post_scheduler(botId: str, userId: int, groupId: int, msg: str, judgeW
     await bot.send_private_msg(user_id=userId, message=msg)
     if msg_img is not None:
         await bot.send_private_msg(user_id=userId, message=msg_img)
-
 
 async def addScheduler(botId: str, time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0, id=None, fn=None, fnParamsArrs=None):
     if scheduler:
