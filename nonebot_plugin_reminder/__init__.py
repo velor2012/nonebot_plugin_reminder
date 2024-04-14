@@ -64,6 +64,9 @@ driver = get_driver()
 plugin_config = Config.parse_obj(driver.config)
 CONFIG = get_datas()
 
+if plugin_config.reminder_weather:
+    require("nonebot_plugin_heweather")
+    from nonebot_plugin_heweather import _ as weather
 
 try:
     scheduler = require("nonebot_plugin_apscheduler").scheduler
