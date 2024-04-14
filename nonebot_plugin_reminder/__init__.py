@@ -76,12 +76,8 @@ logger.opt(colors=True).info(
     else "未检测到软依赖<y>nonebot_plugin_apscheduler</y>，<r>禁用定时任务功能</r>"
 )
 
-if plugin_config.reminder_weather:
-    require("nonebot_plugin_heweather")
-    from nonebot_plugin_heweather import _ as weather
-
-remainer_matcher = on_regex(r"^定时[\s]*(\d{1,2}:\d{1,2})?$", priority=999, rule=to_me())
-fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}:\d{1,2})?$", priority=999,rule=to_me())
+remainer_matcher = on_regex(r"^定时[\s]*(\d{1,2}[:|：]\d{1,2})?$", priority=999, rule=to_me())
+fetch_matcher = on_regex(r"^定时请求[\s]*(\d{1,2}[:|：]\d{1,2})?$", priority=999,rule=to_me())
 list_matcher = on_regex(r"^定时列表[\s]*(\d+)?", priority=999,rule=to_me())
 list_apsjob_matcher = on_regex(r"^定时jobs", priority=999,rule=to_me())
 clear_matcher = on_regex(r"^清(空|除)定时", priority=999,rule=to_me())
@@ -388,10 +384,13 @@ async def post_scheduler(botId: str, userId: int, groupId: int, msg: str, judgeW
 async def addScheduler(botId: str, time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0, id=None, fn=None, fnParamsArrs=None):
     if scheduler:
         ## 小时-分钟格式的时间提取出来
-        hour, minute = time.split(":")
-        if time.index(":") == -1:
-            hour, minute = time.split("：")
-            return {"code": -1, "msg": f"时间格式错误，应为 HH:MM"}
+        times = time.split(":")
+        if len(times) != 2:
+            times = time.split("：")
+            if len(times) != 2:
+                return {"code": -1, "msg": f"时间格式错误，应为 HH:MM"}
+            
+        hour, minute = times
         
         logger.opt(colors=True).info(
             f"已设定于 <y>{str(hour).rjust(2, '0')}:{str(minute).rjust(2, '0')}</y> 定时发送提醒"
