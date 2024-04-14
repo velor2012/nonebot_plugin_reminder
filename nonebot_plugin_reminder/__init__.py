@@ -310,22 +310,21 @@ async def post_scheduler(botId: str, userId: int, groupId: int, msg: str, judgeW
             )
             return
 
+    msg = Message(msg)
     msg_img = None
     if url is not None and url != "" and isUrlSupport(url):
         msg_img = MessageSegment.image(url)
         logger.opt(colors=True).debug(
             f"获取图片成功"
         )
+        msg = msg + Message(msg_img)
     
     bot = get_bot(self_id=botId)
     if(groupId > 0):
-        msg = Message(msg)
         # at定时者
         # if userId > 0:
         #     msg.append(MessageSegment.at(userId))
         await bot.send_group_msg(group_id=groupId, message=msg)
-        if msg_img is not None:
-            await bot.send_group_msg(group_id=groupId, message=msg_img)
         return
     
     logger.opt(colors=True).debug(
@@ -341,13 +340,15 @@ async def post_scheduler(botId: str, userId: int, groupId: int, msg: str, judgeW
         await save_datas(CONFIG=CONFIG)
         
     await bot.send_private_msg(user_id=userId, message=msg)
-    if msg_img is not None:
-        await bot.send_private_msg(user_id=userId, message=msg_img)
 
 async def addScheduler(botId: str, time: str, data: str, userId: int , repeat: str = 1, url: str = None, groupId:int = 0, id=None, fn=None, fnParamsArrs=None):
     if scheduler:
         ## 小时-分钟格式的时间提取出来
         hour, minute = time.split(":")
+        if time.index(":") == -1:
+            hour, minute = time.split("：")
+            return {"code": -1, "msg": f"时间格式错误，应为 HH:MM"}
+        
         logger.opt(colors=True).info(
             f"已设定于 <y>{str(hour).rjust(2, '0')}:{str(minute).rjust(2, '0')}</y> 定时发送提醒"
         )
