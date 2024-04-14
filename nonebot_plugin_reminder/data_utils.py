@@ -36,7 +36,7 @@ def clear_datas(CONFIG: Any):
 def item2string(item: Any):
     return f"id: {item['id']} \n\
     报送机器人：{item['bot']} \n\
-    目标: {item['target']} \n\
+    目标: { 'QQ: ' + str(item['userId']) if int(item['groupId']) < 0 else '群组: ' + str(item['groupId'])}  \n\
     内容: { item['data'] } \n\
     分类: { 'normal' if 'type' not in item else item['type'] } \n\
     URL: {item['url']} \n\

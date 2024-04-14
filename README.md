@@ -21,7 +21,7 @@ _✨ NoneBot 插件简单描述 ✨_
 
 </div>
 
-这是一个 nonebot2 插件库, 主要用来提醒大家别忘记什么事情，可以看成定时提醒插件， 依赖于nonebot-plugin-send-anything-anywhere，理论上支持大部分平台，但目前只测试过onebot.v11。
+这是一个 nonebot2 插件库, 主要用来提醒大家别忘记什么事情，可以看成定时提醒插件.
 
 
 ## 指令
