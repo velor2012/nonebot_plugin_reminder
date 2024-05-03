@@ -277,7 +277,8 @@ async def _(
             item["status"] = 1
     elif mode == "关闭":
         item["status"] = 0
-        setScheduler(schId, 0)
+        if(await setScheduler(schId, 0) < 0) :
+            await sendReply(bot, matcher, event, f"{mode}定时{schId}失败")
     elif mode == "删除":
         CONFIG.pop(schId, {})
         await removeScheduler(schId)
@@ -410,8 +411,16 @@ async def setScheduler(id: str, status: int = 1):
     if scheduler and isVaildId(id):
         if(status == 0):
             scheduler.pause_job(id)
+            logger.opt(colors=True).info(
+                f"已关闭定时 <y>{str(id)}</y>"
+            )
         else:
             scheduler.reschedule_job(id)
+            logger.opt(colors=True).info(
+                f"已开启定时 <y>{str(id)}</y>"
+            )
+        return 1
+    return -1
             
 async def removeScheduler(id: str):
     logger.opt(colors=True).info(
