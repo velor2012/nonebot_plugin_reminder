@@ -34,15 +34,16 @@ def clear_datas(CONFIG: Any):
     return CONFIG
 
 def item2string(item: Any):
-    return f"id: {item['id']} \n\
-    报送机器人：{item['bot']} \n\
-    目标: { 'QQ: ' + str(item['userId']) if int(item['groupId']) < 0 else '群组: ' + str(item['groupId'])}  \n\
-    内容: { item['data'] } \n\
+    # 处理item中没有对应key的情况
+    return f"id: {item.get('id', 'None')} \n\
+    报送机器人：{item.get('bot', 'None')} \n\
+    目标: { 'QQ: ' + str(item.get('userId', 'None')) if int(item.get('groupId', 'None')) < 0 else '群组: ' + str(item.get('groupId', 'None'))}  \n\
+    内容: {item.get('data', 'None')} \n\
     分类: { 'normal' if 'type' not in item else item['type'] } \n\
-    URL: {item['url']} \n\
-    周期：{ '每天' if item['repeat'] == '1' else '工作日' if item['repeat'] == '3' else  item['repeat'] } \n\
-    时间: {item['time']} \n\
-    状态: {'开启' if item['status'] == 1 else '关闭'} \n\
+    URL: {item.get('url', 'None')} \n\
+    周期：{ '每天' if item.get('repeat', 'None') == '1' else '工作日' if item.get('repeat', 'None') == '3' else  item.get('repeat', 'None') } \n\
+    时间: {item.get('time', 'None')} \n\
+    状态: {'开启' if item.get('status', 'None') == 1 else '关闭'} \n\
     -------------------------\n"
     
 async def backup(config: Dict[str, Any] = None, maxBkNum:int = 2):
