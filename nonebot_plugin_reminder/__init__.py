@@ -347,11 +347,16 @@ async def post_scheduler(botId: str, userId: int, groupId: int, msg: str, judgeW
         f"执行任务<g>url: {url} msg:{msg}</g>"
     )
     if judgeWorkDay:
-        if not is_workday(date.today()):
-            logger.opt(colors=True).info(
-                f"今天不是工作日，不发送提醒"
+        try
+            if not is_workday(date.today()):
+                logger.opt(colors=True).info(
+                    f"今天不是工作日，不发送提醒"
+                )
+                return
+        except Exception as e:
+            logger.opt(colors=True).error(
+                f"判断是否是工作日出错，error: {e}"
             )
-            return
 
     msg = Message(msg)
     msg_img = None
