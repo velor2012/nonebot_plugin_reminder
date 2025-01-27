@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nonebot-plugin-reminder"
-version = "0.4.1"
+version = "0.4.2"
 description = "This plugin can remind you not to forget something"
 authors = ["velor2012 <38395332+velor2012@users.noreply.github.com>"]
 license = "MIT"
