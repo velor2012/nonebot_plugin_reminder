@@ -10,6 +10,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
     GroupMessageEvent
 )
+from nonebot import get_plugin_config
 
 from nonebot.rule import to_me
 from nonebot.params import Matcher, RegexGroup
@@ -61,7 +62,7 @@ __plugin_meta__ = PluginMetadata(
     # 若插件可以保证兼容所有适配器（即仅使用基本适配器功能）可不填写，否则应该列出插件支持的适配器。
 )
 driver = get_driver()
-plugin_config = Config.parse_obj(driver.config)
+plugin_config = get_plugin_config(Config)
 CONFIG = get_datas()
 
 if plugin_config.reminder_weather:

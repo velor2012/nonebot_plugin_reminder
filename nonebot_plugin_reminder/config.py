@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class Config(BaseModel):
     # 默认提醒时间的小时数
@@ -16,6 +16,4 @@ class Config(BaseModel):
     # 最多有几个备份
     reminder_weather:bool = False
     
-    class Config:
-        extra = "ignore"
-        case_sensitive = False
+    model_config = ConfigDict(extra='ignore', case_sensitive=False)
