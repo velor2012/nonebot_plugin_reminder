@@ -87,10 +87,7 @@ update_matcher = on_regex(rf"^(修改|更新)定时[\s]*({plugin_config.reminder
 
 lock = asyncio.Lock()
 
-
-@remainer_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
-@remainer_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
-async def remainer_handler(
+async def common_matcher(
     bot: Bot,
     event: MessageEvent,
     matcher: Matcher,
@@ -125,6 +122,20 @@ async def remainer_handler(
     
     await sendReply(bot, matcher, event, msg)
 
+
+@remainer_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
+@remainer_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
+async def remainer_matcher(
+    bot: Bot,
+    event: MessageEvent,
+    matcher: Matcher,
+    args: Tuple[Optional[str]] = RegexGroup(),
+    word: Message = ArgPlainText(),
+    repeat: Message = ArgPlainText()
+):
+    await common_matcher(bot, event, matcher, args, word, repeat)
+    
+
 @fetch_matcher.got("repeat", prompt="选择执行间隔:\n1.每天 回复1 \n2.某天回复具体日期，格式为yyyy-mm-dd,如2023-01-03 \n3.工作日 回复3")
 @fetch_matcher.got("word", prompt="请输入提醒语句，默认为 打卡!!!， 回复0即可")
 @fetch_matcher.got("url", prompt="请输入需要请求的url，目前支持图片")
@@ -140,7 +151,7 @@ async def fetch_handler(
     if url is None or url == "" or not isUrlSupport(url):
         await sendReply(bot, matcher, event, "暂不支持该类型的请求")
     else:
-        await remainer_handler(bot, event, matcher, args, word, repeat, url)
+        await common_matcher(bot, event, matcher, args, word, repeat, url)
 
 
 @update_matcher.got("type", prompt="请输入需要修改的地方： 1. 时间 2.间隔 3.提醒语句 4.url 5.对象 6.群组")
