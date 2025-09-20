@@ -23,14 +23,15 @@ def get_datas(filepath: Path = None):
             json.dump(CONFIG, f, ensure_ascii=False, indent=4)
     return CONFIG
 async def save_datas(CONFIG: Any, filepath: Path = None):
+    print("save Config", CONFIG)
     if filepath is None:
         filepath = data_file
     async with lock:
         async with aiofiles.open(filepath, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
 
-def clear_datas(CONFIG: Any):
-    CONFIG = {}
+def clear_datas(CONFIG: dict):
+    CONFIG.clear()
     return CONFIG
 
 def item2string(item: Any):
