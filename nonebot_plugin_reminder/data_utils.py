@@ -23,14 +23,15 @@ def get_datas(filepath: Path = None):
             json.dump(CONFIG, f, ensure_ascii=False, indent=4)
     return CONFIG
 async def save_datas(CONFIG: Any, filepath: Path = None):
+    print("save Config", CONFIG)
     if filepath is None:
         filepath = data_file
     async with lock:
         async with aiofiles.open(filepath, "w", encoding="utf8") as f:
             await f.write(json.dumps(CONFIG, ensure_ascii=False, indent=4))
 
-def clear_datas(CONFIG: Any):
-    CONFIG = {}
+def clear_datas(CONFIG: dict):
+    CONFIG.clear()
     return CONFIG
 
 def item2string(item: Any):
@@ -39,7 +40,6 @@ def item2string(item: Any):
     报送机器人：{item.get('bot', 'None')} \n\
     目标: { 'QQ: ' + str(item.get('userId', 'None')) if int(item.get('groupId', 'None')) < 0 else '群组: ' + str(item.get('groupId', 'None'))}  \n\
     内容: {item.get('data', 'None')} \n\
-    分类: { 'normal' if 'type' not in item else item['type'] } \n\
     URL: {item.get('url', 'None')} \n\
     周期：{ '每天' if item.get('repeat', 'None') == '1' else '工作日' if item.get('repeat', 'None') == '3' else  item.get('repeat', 'None') } \n\
     时间: {item.get('time', 'None')} \n\
